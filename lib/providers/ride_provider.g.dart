@@ -287,7 +287,7 @@ class _GetRideStopsProviderElement
   int get rideId => (origin as GetRideStopsProvider).rideId;
 }
 
-String _$rideSearchHash() => r'06fb49361e6f4d69d0fc463a4148e0b6d51880db';
+String _$rideSearchHash() => r'bd8bc59e7408d1633a0f7118e58f9048efca27b4';
 
 /// See also [RideSearch].
 @ProviderFor(RideSearch)
@@ -302,7 +302,7 @@ final rideSearchProvider =
 );
 
 typedef _$RideSearch = AutoDisposeNotifier<RideState>;
-String _$myRidesHash() => r'dc2b640efc7712e104af8933dd2e89444c7192b9';
+String _$myRidesHash() => r'9a3f88febccf1dc6a62480a8f1d95e6998071e19';
 
 /// See also [MyRides].
 @ProviderFor(MyRides)

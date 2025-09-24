@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/auth_provider.dart';
-import '../../providers/ride_provider.dart';
+import '../../providers/ride_provider.dart' as RideProvider;
 import '../../providers/booking_provider.dart';
 import '../../models/ride_model.dart' hide SearchParameters;
 import '../../core/constants/app_colors.dart';
@@ -50,6 +50,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             await ref.read(myBookingsProvider.notifier).loadMyBookings();
           }
         },
+        color: AppColors.primaryColor,
         child: CustomScrollView(
           slivers: [
             // App Bar
@@ -58,15 +59,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               floating: false,
               pinned: true,
               backgroundColor: AppColors.primaryColor,
+              elevation: 0,
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     gradient: LinearGradient(
                       begin: Alignment.topCenter,
                       end: Alignment.bottomCenter,
                       colors: [
                         AppColors.primaryColor,
-                        AppColors.primaryColor,
+                        AppColors.primaryColor.withOpacity(0.9),
                       ],
                     ),
                   ),
@@ -164,6 +166,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     
                     // Popular Routes
                     _buildPopularRoutes(),
+                    
+                    const SizedBox(height: 32),
                   ],
                 ),
               ),
@@ -178,57 +182,80 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'البحث عن رحلة',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white,
+              Colors.grey.shade50,
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(
+                    Icons.search,
+                    color: AppColors.primaryColor,
+                    size: 24,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    'البحث عن رحلة',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 16),
-            CustomTextField(
-              controller: _fromController,
-              labelText: 'من',
-              hintText: 'نقطة الانطلاق',
-              prefixIcon: Icons.my_location,
-              maxLength: 100,
-              style: const TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 12),
-            CustomTextField(
-              controller: _toController,
-              labelText: 'إلى',
-              hintText: 'الوجهة',
-              prefixIcon: Icons.location_on,
-              maxLength: 100,
-              style: const TextStyle(fontSize: 16),
-            ),
-            const SizedBox(height: 12),
-            InkWell(
-              onTap: _selectDate,
-              child: CustomTextField(
-                controller: _dateController,
-                labelText: 'التاريخ',
-                hintText: 'اختر تاريخ السفر',
-                prefixIcon: Icons.calendar_today,
-                enabled: false,
-                maxLength: 50,
+              const SizedBox(height: 16),
+              CustomTextField(
+                controller: _fromController,
+                labelText: 'من',
+                hintText: 'نقطة الانطلاق',
+                prefixIcon: Icons.my_location,
+                maxLength: 100,
                 style: const TextStyle(fontSize: 16),
               ),
-            ),
-            const SizedBox(height: 20),
-            CustomButton(
-              text: 'البحث',
-              onPressed: _searchRides,
-              icon: Icons.search,
-            ),
-          ],
+              const SizedBox(height: 12),
+              CustomTextField(
+                controller: _toController,
+                labelText: 'إلى',
+                hintText: 'الوجهة',
+                prefixIcon: Icons.location_on,
+                maxLength: 100,
+                style: const TextStyle(fontSize: 16),
+              ),
+              const SizedBox(height: 12),
+              InkWell(
+                onTap: _selectDate,
+                child: CustomTextField(
+                  controller: _dateController,
+                  labelText: 'التاريخ',
+                  hintText: 'اختر تاريخ السفر',
+                  prefixIcon: Icons.calendar_today,
+                  enabled: false,
+                  maxLength: 50,
+                  style: const TextStyle(fontSize: 16),
+                ),
+              ),
+              const SizedBox(height: 20),
+              CustomButton(
+                text: 'البحث',
+                onPressed: _searchRides,
+                icon: Icons.search,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -243,13 +270,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'إجراءات سريعة',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-                color: AppColors.textPrimary,
-              ),
+            Row(
+              children: [
+                Icon(
+                  Icons.dashboard,
+                  color: AppColors.primaryColor,
+                  size: 20,
+                ),
+                const SizedBox(width: 8),
+                const Text(
+                  'إجراءات سريعة',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             Row(
@@ -298,7 +335,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: Column(
           children: [
             Icon(icon, size: 24, color: color),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             Text(
               title,
               style: TextStyle(
@@ -318,8 +355,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Consumer(
       builder: (context, ref, child) {
         final bookingsState = ref.watch(myBookingsProvider);
+        
+        // ✅ FIXED: Safe filtering of bookings
         final upcomingBookings = bookingsState.bookings
-            .where((b) => b.isConfirmed || b.isPending)
+            .where((b) => _isUpcomingBooking(b))
             .take(3)
             .toList();
 
@@ -333,17 +372,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'الحجوزات القادمة',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textPrimary,
-                  ),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.event_note,
+                      color: AppColors.primaryColor,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'الحجوزات القادمة',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
                 ),
                 TextButton(
                   onPressed: () => _viewAllBookings(),
-                  child: const Text('عرض الكل'),
+                  child: const Text(
+                    'عرض الكل',
+                    style: TextStyle(color: AppColors.primaryColor),
+                  ),
                 ),
               ],
             ),
@@ -372,47 +424,91 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       child: Card(
         elevation: 2,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'حجز #${booking.id}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.bold,
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.white,
+                Colors.grey.shade50,
+              ],
+            ),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'حجز #${_getBookingId(booking)}',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _getBookingStatusColor(booking).withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        _getBookingStatusDisplayText(booking),
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: _getBookingStatusColor(booking),
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                booking.pickupLocation ?? 'مكان الانطلاق',
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.textSecondary,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.green.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  booking.statusDisplayText ?? _getBookingStatusText(booking.status),
+                const SizedBox(height: 4),
+                Text(
+                  _getBookingLocation(booking),
                   style: const TextStyle(
-                    fontSize: 10,
-                    color: Colors.green,
-                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.event_seat,
+                      size: 14,
+                      color: AppColors.textSecondary,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_getBookingSeats(booking)} مقعد',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      '${_getBookingPrice(booking)} ر.س',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.primaryColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -423,77 +519,91 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 30,
-              backgroundImage: _getUserProfileImage(user),
-              backgroundColor: AppColors.primaryColor.withOpacity(0.1),
-              child: _getUserProfileImage(user) == null
-                  ? Text(
-                      _getUserInitial(user),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white,
+              AppColors.primaryColor.withOpacity(0.05),
+            ],
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 30,
+                backgroundImage: _getUserProfileImage(user),
+                backgroundColor: AppColors.primaryColor.withOpacity(0.1),
+                child: _getUserProfileImage(user) == null
+                    ? Text(
+                        _getUserInitial(user),
+                        style: const TextStyle(
+                          fontSize: 20,
+                          color: AppColors.primaryColor,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _getUserFullName(user),
                       style: const TextStyle(
-                        fontSize: 20,
-                        color: AppColors.primaryColor,
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
                       ),
-                    )
-                  : null,
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _getUserFullName(user),
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
                     ),
-                  ),
-                  const SizedBox(height: 4),
-                  if (_getUserRating(user) != null) ...[
-                    Row(
-                      children: [
-                        const Icon(Icons.star, size: 16, color: Colors.amber),
-                        const SizedBox(width: 4),
-                        Text(
-                          _getUserRating(user)!.toStringAsFixed(1),
-                          style: const TextStyle(fontSize: 14),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          '(${_getUserTotalRides(user)} رحلة)',
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.textSecondary,
+                    const SizedBox(height: 4),
+                    if (_getUserRating(user) != null) ...[
+                      Row(
+                        children: [
+                          const Icon(Icons.star, size: 16, color: Colors.amber),
+                          const SizedBox(width: 4),
+                          Text(
+                            _getUserRating(user)!.toStringAsFixed(1),
+                            style: const TextStyle(fontSize: 14),
                           ),
+                          const SizedBox(width: 8),
+                          Text(
+                            '(${_getUserTotalRides(user)} رحلة)',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    Container(
+                      margin: const EdgeInsets.only(top: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryColor.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _getUserRole(user),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.primaryColor,
+                          fontWeight: FontWeight.w600,
                         ),
-                      ],
+                      ),
                     ),
                   ],
-                  Container(
-                    margin: const EdgeInsets.only(top: 8),
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.primaryColor.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      _getUserRole(user),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: AppColors.primaryColor,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -509,13 +619,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'الوجهات الشائعة',
-          style: TextStyle(
-            fontSize: 16,
-            fontWeight: FontWeight.bold,
-            color: AppColors.textPrimary,
-          ),
+        Row(
+          children: [
+            Icon(
+              Icons.trending_up,
+              color: AppColors.primaryColor,
+              size: 20,
+            ),
+            const SizedBox(width: 8),
+            const Text(
+              'الوجهات الشائعة',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
+                color: AppColors.textPrimary,
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 12),
         ...routes.map((route) => Card(
@@ -523,21 +643,43 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           elevation: 1,
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           child: ListTile(
-            leading: const Icon(
-              Icons.trending_up,
-              color: AppColors.primaryColor,
+            leading: Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.route,
+                color: AppColors.primaryColor,
+                size: 20,
+              ),
             ),
             title: Text(
               '${route['from']} → ${route['to']}',
               style: const TextStyle(fontWeight: FontWeight.w600),
             ),
             subtitle: Text('${route['rides']} رحلة متاحة'),
-            trailing: Text(
-              'من ${route['price']} ر.س',
-              style: const TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppColors.primaryColor,
-              ),
+            trailing: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(
+                  'من ${route['price']} ر.س',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.primaryColor,
+                    fontSize: 14,
+                  ),
+                ),
+                const Text(
+                  'للمقعد',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
             ),
             onTap: () {
               _fromController.text = route['from']!;
@@ -554,7 +696,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   ImageProvider? _getUserProfileImage(dynamic user) {
     if (user == null) return null;
     try {
-      final image = user.profileImage ?? user.avatar;
+      final image = user.profileImage ?? user.avatar ?? user.profileImageUrl;
       return image != null ? NetworkImage(image) : null;
     } catch (e) {
       return null;
@@ -640,6 +782,78 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  // ✅ FIXED: Booking helper methods with safe property access
+  bool _isUpcomingBooking(dynamic booking) {
+    try {
+      final status = booking.status ?? '';
+      return status == 'confirmed' || status == 'pending';
+    } catch (e) {
+      return false;
+    }
+  }
+
+  String _getBookingId(dynamic booking) {
+    try {
+      return booking.id?.toString() ?? 'N/A';
+    } catch (e) {
+      return 'N/A';
+    }
+  }
+
+  String _getBookingLocation(dynamic booking) {
+    try {
+      return booking.pickupLocation ?? 'مكان الانطلاق';
+    } catch (e) {
+      return 'مكان الانطلاق';
+    }
+  }
+
+  int _getBookingSeats(dynamic booking) {
+    try {
+      return booking.seatsBooked ?? booking.seats ?? 1;
+    } catch (e) {
+      return 1;
+    }
+  }
+
+  String _getBookingPrice(dynamic booking) {
+    try {
+      final price = booking.totalPrice ?? booking.price ?? 0;
+      return price.toString();
+    } catch (e) {
+      return '0';
+    }
+  }
+
+  String _getBookingStatusDisplayText(dynamic booking) {
+    try {
+      final status = booking.status ?? '';
+      return booking.statusDisplayText ?? _getBookingStatusText(status);
+    } catch (e) {
+      return 'غير محدد';
+    }
+  }
+
+  Color _getBookingStatusColor(dynamic booking) {
+    try {
+      final status = booking.status ?? '';
+      switch (status) {
+        case 'pending':
+          return Colors.orange;
+        case 'confirmed':
+          return Colors.green;
+        case 'cancelled':
+          return Colors.red;
+        case 'completed':
+          return Colors.blue;
+        default:
+          return AppColors.textSecondary;
+      }
+    } catch (e) {
+      return AppColors.textSecondary;
+    }
+  }
+
   String _getBookingStatusText(String status) {
     switch (status) {
       case 'pending':
@@ -661,6 +875,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       initialDate: DateTime.now(),
       firstDate: DateTime.now(),
       lastDate: DateTime.now().add(const Duration(days: 90)),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: ColorScheme.light(
+              primary: AppColors.primaryColor,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
     );
 
     if (date != null) {
@@ -671,29 +898,61 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
+  // ✅ FIXED: _searchRides method with correct parameter names
   void _searchRides() {
     if (_fromController.text.isEmpty || _toController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('يرجى تحديد نقطة الانطلاق والوجهة'),
+        SnackBar(
+          content: const Row(
+            children: [
+              Icon(Icons.warning, color: Colors.white),
+              SizedBox(width: 8),
+              Text('يرجى تحديد نقطة الانطلاق والوجهة'),
+            ],
+          ),
           backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
         ),
       );
       return;
     }
 
-    final searchParams = SearchParameters(
-      from: _fromController.text.trim(),
-      to: _toController.text.trim(),
-      date: _selectedDate?.toIso8601String().split('T')[0],
+    // ✅ FIXED: Use correct parameter names for SearchParameters
+    final searchParams = RideProvider.SearchParameters(
+      fromCity: _fromController.text.trim(),
+      toCity: _toController.text.trim(),
+      departureDate: _selectedDate?.toIso8601String().split('T')[0],
+      limit: 20, // Optional: Set a reasonable limit
     );
 
-    ref.read(rideSearchProvider.notifier).searchRides(searchParams);
+    ref.read(RideProvider.rideSearchProvider.notifier).searchRides(searchParams);
     
+    // Navigate to rides tab
     final tabController = DefaultTabController.of(context);
     if (tabController != null) {
-      tabController.animateTo(1);
+      tabController.animateTo(1); // Navigate to rides tab
     }
+
+    // Show success message
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.search, color: Colors.white),
+            SizedBox(width: 8),
+            Text('جاري البحث عن الرحلات...'),
+          ],
+        ),
+        backgroundColor: AppColors.primaryColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
   }
 
   void _createRide() {
@@ -703,14 +962,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   void _viewMyRides() {
     final tabController = DefaultTabController.of(context);
     if (tabController != null) {
-      tabController.animateTo(1);
+      tabController.animateTo(1); // Navigate to rides tab
     }
   }
 
   void _viewAllBookings() {
     final tabController = DefaultTabController.of(context);
     if (tabController != null) {
-      tabController.animateTo(2);
+      tabController.animateTo(2); // Navigate to bookings tab
     }
   }
 

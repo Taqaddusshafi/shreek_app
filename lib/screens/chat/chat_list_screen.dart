@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../providers/chat_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../models/chat_model.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/loading_widget.dart';
@@ -20,8 +21,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(chatProvider.notifier).loadChatList();
-      ref.read(chatProvider.notifier).loadUnreadCount();
+      ref.read(chatProvider.notifier).initialize();
     });
   }
 
@@ -68,8 +68,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             ),
           IconButton(
             onPressed: () {
-              ref.read(chatProvider.notifier).loadChatList();
-              ref.read(chatProvider.notifier).loadUnreadCount();
+              ref.read(chatProvider.notifier).refreshAll();
             },
             icon: const Icon(Icons.refresh_rounded),
             tooltip: 'تحديث',
@@ -136,7 +135,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             const SizedBox(height: 24),
             ElevatedButton.icon(
               onPressed: () {
-                ref.read(chatProvider.notifier).loadChatList();
+                ref.read(chatProvider.notifier).refreshAll();
               },
               icon: const Icon(Icons.refresh),
               label: const Text('إعادة المحاولة'),
@@ -196,7 +195,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
             const SizedBox(height: 24),
             OutlinedButton.icon(
               onPressed: () {
-                ref.read(chatProvider.notifier).loadChatList();
+                ref.read(chatProvider.notifier).refreshAll();
               },
               icon: const Icon(Icons.refresh),
               label: const Text('تحديث'),
@@ -218,8 +217,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
   Widget _buildChatList(List<ChatInfo> chatInfos) {
     return RefreshIndicator(
       onRefresh: () async {
-        await ref.read(chatProvider.notifier).loadChatList();
-        await ref.read(chatProvider.notifier).loadUnreadCount();
+        await ref.read(chatProvider.notifier).refreshAll();
       },
       color: AppColors.primaryColor,
       child: ListView.separated(
@@ -236,6 +234,11 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
 
   Widget _buildChatTile(ChatInfo chatInfo) {
     final hasUnread = chatInfo.hasUnread;
+    final currentUser = ref.watch(currentUserProvider);
+    
+    // ✅ FIXED: Get participant name based on current user
+    final participantName = chatInfo.getParticipantName(currentUser?.id ?? 0);
+    final participantAvatar = chatInfo.getParticipantAvatar(currentUser?.id ?? 0);
 
     return Container(
       decoration: BoxDecoration(
@@ -266,12 +269,12 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                     CircleAvatar(
                       radius: 28,
                       backgroundColor: AppColors.primaryColor.withOpacity(0.1),
-                      backgroundImage: chatInfo.participantImage != null
-                          ? NetworkImage(chatInfo.participantImage!)
+                      backgroundImage: participantAvatar != null
+                          ? NetworkImage(participantAvatar)
                           : null,
-                      child: chatInfo.participantImage == null
+                      child: participantAvatar == null
                           ? Text(
-                              _getInitials(chatInfo.participantName),
+                              _getInitials(participantName),
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.bold,
@@ -322,7 +325,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        chatInfo.displayTitle,
+                        participantName,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight: hasUnread ? FontWeight.bold : FontWeight.w600,
@@ -334,50 +337,32 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                       
                       const SizedBox(height: 4),
                       
-                      if (chatInfo.rideId != null || chatInfo.bookingId != null) ...[
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: AppColors.primaryColor.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                chatInfo.rideId != null ? Icons.directions_car : Icons.bookmark,
-                                size: 14,
-                                color: AppColors.primaryColor,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                chatInfo.rideId != null 
-                                    ? 'رحلة #${chatInfo.rideId}'
-                                    : 'حجز #${chatInfo.bookingId}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppColors.primaryColor,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
-                          ),
+                      // ✅ FIXED: Show context info
+                      Text(
+                        chatInfo.contextInfo,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: AppColors.primaryColor,
+                          fontWeight: FontWeight.w500,
                         ),
-                        const SizedBox(height: 6),
-                      ],
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      
+                      const SizedBox(height: 6),
                       
                       Row(
                         children: [
                           Expanded(
                             child: Text(
-                              chatInfo.lastMessageContent ?? 'لم يتم إرسال رسائل بعد',
+                              chatInfo.lastMessageDisplay,
                               style: TextStyle(
                                 fontSize: 14,
                                 color: hasUnread 
                                     ? Colors.grey.shade800 
                                     : Colors.grey.shade600,
                                 fontWeight: hasUnread ? FontWeight.w500 : FontWeight.normal,
-                                fontStyle: chatInfo.lastMessageContent == null ? FontStyle.italic : null,
+                                fontStyle: chatInfo.lastMessage == null ? FontStyle.italic : null,
                               ),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
@@ -394,7 +379,7 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
                                 borderRadius: BorderRadius.circular(8),
                               ),
                               child: Text(
-                                _formatMessageTime(chatInfo.lastMessageTime!),
+                                chatInfo.lastMessageTimeDisplay,
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: hasUnread 
@@ -439,104 +424,28 @@ class _ChatListScreenState extends ConsumerState<ChatListScreen> {
     }
   }
 
-  String _formatMessageTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
-
-    if (messageDate == today) {
-      return DateFormat('HH:mm').format(dateTime);
-    } else if (messageDate == today.subtract(const Duration(days: 1))) {
-      return 'أمس';
-    } else if (dateTime.isAfter(today.subtract(const Duration(days: 7)))) {
-      const arabicDays = {
-        'Monday': 'الاثنين',
-        'Tuesday': 'الثلاثاء',
-        'Wednesday': 'الأربعاء',
-        'Thursday': 'الخميس',
-        'Friday': 'الجمعة',
-        'Saturday': 'السبت',
-        'Sunday': 'الأحد',
-      };
-      final englishDay = DateFormat('EEEE').format(dateTime);
-      return arabicDays[englishDay] ?? englishDay;
-    } else if (dateTime.year == now.year) {
-      return DateFormat('dd/MM').format(dateTime);
-    } else {
-      return DateFormat('dd/MM/yyyy').format(dateTime);
-    }
-  }
-
-  // ✅ FIXED: Create conversation object that matches ChatScreen expectations
+  // ✅ FIXED: Open chat with proper navigation
   void _openChat(ChatInfo chatInfo) {
+    final currentUser = ref.watch(currentUserProvider);
+    
+    // Mark as read when opening
     if (chatInfo.hasUnread) {
-      ref.read(chatProvider.notifier).markChatAsRead(
-        bookingId: chatInfo.bookingId,
-        rideId: chatInfo.rideId,
-      );
+      ref.read(chatProvider.notifier).markChatAsRead(chatInfo.id);
     }
     
-    // ✅ Create conversation object that matches your ChatScreen structure
-    final conversation = ConversationData(
-      id: chatInfo.bookingId ?? chatInfo.rideId ?? 0,
+    // Set active chat
+    ref.read(chatProvider.notifier).setActiveChat(
+      chatInfo.id,
       bookingId: chatInfo.bookingId,
       rideId: chatInfo.rideId,
-      participant: ParticipantData(
-        firstName: chatInfo.participantName.split(' ').first,
-        fullName: chatInfo.participantName,
-        profileImage: chatInfo.participantImage,
-      ),
-      ride: chatInfo.rideId != null ? RideData(
-        fromLocation: 'نقطة الانطلاق',
-        toLocation: 'نقطة الوصول',
-      ) : null,
     );
     
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (context) => ChatScreen(
-          conversation: conversation,
+          chatInfo: chatInfo,
         ),
       ),
     );
   }
-}
-
-// ✅ Helper classes to match your ChatScreen expectations
-class ConversationData {
-  final int id;
-  final int? bookingId;
-  final int? rideId;
-  final ParticipantData participant;
-  final RideData? ride;
-
-  ConversationData({
-    required this.id,
-    this.bookingId,
-    this.rideId,
-    required this.participant,
-    this.ride,
-  });
-}
-
-class ParticipantData {
-  final String firstName;
-  final String fullName;
-  final String? profileImage;
-
-  ParticipantData({
-    required this.firstName,
-    required this.fullName,
-    this.profileImage,
-  });
-}
-
-class RideData {
-  final String fromLocation;
-  final String toLocation;
-
-  RideData({
-    required this.fromLocation,
-    required this.toLocation,
-  });
 }

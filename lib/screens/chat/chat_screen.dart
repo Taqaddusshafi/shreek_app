@@ -9,11 +9,11 @@ import '../../core/constants/app_colors.dart';
 import '../../core/widgets/loading_widget.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
-  final dynamic conversation;
+  final ChatInfo chatInfo;
 
   const ChatScreen({
     super.key,
-    required this.conversation,
+    required this.chatInfo,
   });
 
   @override
@@ -30,17 +30,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      // ✅ FIXED: Use your provider methods
+      // ✅ FIXED: Load chat messages using chat ID
       ref.read(chatProvider.notifier).loadChatMessages(
-        bookingId: widget.conversation.bookingId,
-        rideId: widget.conversation.rideId,
+        chatId: widget.chatInfo.id,
       );
       
       // Mark as read when entering chat
-      ref.read(chatProvider.notifier).markChatAsRead(
-        bookingId: widget.conversation.bookingId,
-        rideId: widget.conversation.rideId,
-      );
+      ref.read(chatProvider.notifier).markChatAsRead(widget.chatInfo.id);
     });
 
     _focusNode.addListener(_onFocusChange);
@@ -68,6 +64,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Widget build(BuildContext context) {
     final chatState = ref.watch(chatProvider);
     final currentUser = ref.watch(currentUserProvider);
+    
+    // ✅ FIXED: Get participant info based on current user
+    final participantName = widget.chatInfo.getParticipantName(currentUser?.id ?? 0);
+    final participantAvatar = widget.chatInfo.getParticipantAvatar(currentUser?.id ?? 0);
 
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
@@ -79,13 +79,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           children: [
             CircleAvatar(
               radius: 18,
-              backgroundImage: widget.conversation.participant.profileImage != null
-                  ? NetworkImage(widget.conversation.participant.profileImage!)
+              backgroundImage: participantAvatar != null
+                  ? NetworkImage(participantAvatar)
                   : null,
               backgroundColor: Colors.white.withOpacity(0.2),
-              child: widget.conversation.participant.profileImage == null
+              child: participantAvatar == null
                   ? Text(
-                      widget.conversation.participant.firstName[0].toUpperCase(),
+                      participantName.isNotEmpty ? participantName[0].toUpperCase() : 'م',
                       style: const TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
@@ -99,21 +99,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    widget.conversation.participant.fullName,
+                    participantName,
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w600,
                       color: Colors.white,
                     ),
                   ),
-                  if (widget.conversation.ride != null)
-                    Text(
-                      '${widget.conversation.ride!.fromLocation} ← ${widget.conversation.ride!.toLocation}',
-                      style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.white70,
-                      ),
+                  Text(
+                    widget.chatInfo.rideRoute,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.white70,
                     ),
+                  ),
                 ],
               ),
             ),
@@ -142,7 +141,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         itemCount: chatState.messages.length,
                         itemBuilder: (context, index) {
                           final message = chatState.messages[index];
-                          // ✅ FIXED: Use your Message model properties
+                          // ✅ FIXED: Use proper user ID comparison
                           final isMe = message.senderId == currentUser?.id;
                           final showDate = index == 0 || 
                               _shouldShowDate(
@@ -169,6 +168,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildEmptyChat() {
+    final currentUser = ref.watch(currentUserProvider);
+    final participantName = widget.chatInfo.getParticipantName(currentUser?.id ?? 0);
+    
     return Center(
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
@@ -196,7 +198,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ),
           const SizedBox(height: 8),
           Text(
-            'اكتب رسالتك الأولى مع ${widget.conversation.participant.firstName}',
+            'اكتب رسالتك الأولى مع $participantName',
             style: const TextStyle(
               fontSize: 14,
               color: AppColors.textSecondary,
@@ -265,13 +267,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           mainAxisAlignment: isMe ? MainAxisAlignment.end : MainAxisAlignment.start,
           crossAxisAlignment: CrossAxisAlignment.end,
           children: [
-            if (!isMe) ...[
+            if (!isMe) ...[ 
               CircleAvatar(
                 radius: 12,
                 backgroundColor: AppColors.primaryColor.withOpacity(0.1),
                 child: Text(
-                  message.senderName.isNotEmpty 
-                      ? message.senderName[0].toUpperCase()
+                  message.displaySenderName.isNotEmpty 
+                      ? message.displaySenderName[0].toUpperCase()
                       : 'م',
                   style: const TextStyle(
                     fontSize: 10,
@@ -321,7 +323,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          DateFormat('HH:mm').format(message.createdAt),
+                          message.shortTimeDisplay,
                           style: TextStyle(
                             fontSize: 11,
                             color: isMe 
@@ -329,7 +331,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 : Colors.grey.shade600,
                           ),
                         ),
-                        if (isMe) ...[
+                        if (isMe) ...[ 
                           const SizedBox(width: 4),
                           Icon(
                             message.isRead ? Icons.done_all : Icons.done,
@@ -353,19 +355,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildTypingIndicator() {
+    final currentUser = ref.watch(currentUserProvider);
+    final participantName = widget.chatInfo.getParticipantName(currentUser?.id ?? 0);
+    final participantAvatar = widget.chatInfo.getParticipantAvatar(currentUser?.id ?? 0);
+    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Row(
         children: [
           CircleAvatar(
             radius: 12,
-            backgroundImage: widget.conversation.participant.profileImage != null
-                ? NetworkImage(widget.conversation.participant.profileImage!)
+            backgroundImage: participantAvatar != null
+                ? NetworkImage(participantAvatar)
                 : null,
             backgroundColor: AppColors.primaryColor.withOpacity(0.1),
-            child: widget.conversation.participant.profileImage == null
+            child: participantAvatar == null
                 ? Text(
-                    widget.conversation.participant.firstName[0].toUpperCase(),
+                    participantName.isNotEmpty ? participantName[0].toUpperCase() : 'م',
                     style: const TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,
@@ -385,7 +391,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  '${widget.conversation.participant.firstName} يكتب',
+                  '$participantName يكتب',
                   style: const TextStyle(
                     fontSize: 12,
                     color: Colors.grey,
@@ -502,26 +508,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _messageController.clear();
     setState(() => _isTyping = false);
 
-    // ✅ FIXED: Use your provider's sendMessage method
+    // ✅ FIXED: Use chat ID from chatInfo
     final success = await ref.read(chatProvider.notifier).sendMessage(
-      content: message,
-      bookingId: widget.conversation.bookingId,
-      rideId: widget.conversation.rideId,
+      chatId: widget.chatInfo.id,
+      message: message,
     );
 
     if (success) {
       _scrollToBottom();
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('فشل في إرسال الرسالة. حاول مرة أخرى.'),
-          backgroundColor: AppColors.errorColor,
-        ),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('فشل في إرسال الرسالة. حاول مرة أخرى.'),
+            backgroundColor: AppColors.errorColor,
+          ),
+        );
+      }
     }
   }
 
   void _showChatOptions(BuildContext context) {
+    final currentUser = ref.watch(currentUserProvider);
+    final participantName = widget.chatInfo.getParticipantName(currentUser?.id ?? 0);
+    
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -549,13 +559,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.block),
-              title: const Text('حظر المستخدم'),
-              textColor: AppColors.errorColor,
-              iconColor: AppColors.errorColor,
+              leading: const Icon(Icons.archive),
+              title: const Text('أرشفة المحادثة'),
               onTap: () {
                 Navigator.pop(context);
-                _showBlockUserDialog();
+                _archiveChat();
               },
             ),
             ListTile(
@@ -565,7 +573,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               iconColor: Colors.orange,
               onTap: () {
                 Navigator.pop(context);
-                _showReportDialog();
+                _showReportDialog(participantName);
               },
             ),
           ],
@@ -574,40 +582,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  void _showBlockUserDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('حظر المستخدم'),
-        content: Text(
-          'هل أنت متأكد من رغبتك في حظر ${widget.conversation.participant.firstName}؟'
-          '\nلن تتمكن من رؤية رسائله أو التواصل معه.',
+  void _archiveChat() async {
+    final success = await ref.read(chatProvider.notifier).archiveChat(widget.chatInfo.id);
+    
+    if (success && mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('تم أرشفة المحادثة'),
+          backgroundColor: Colors.green,
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.errorColor,
-            ),
-            child: const Text('حظر'),
-          ),
-        ],
-      ),
-    );
+      );
+    }
   }
 
-  void _showReportDialog() {
+  void _showReportDialog(String participantName) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('الإبلاغ عن مشكلة'),
-        content: const Text('ما نوع المشكلة التي تريد الإبلاغ عنها؟'),
+        content: Text('هل تريد الإبلاغ عن مشكلة مع $participantName؟'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -616,6 +610,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
+              // TODO: Implement report functionality
             },
             child: const Text('إبلاغ'),
           ),
