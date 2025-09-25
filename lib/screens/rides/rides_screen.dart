@@ -8,6 +8,7 @@ import '../../providers/booking_provider.dart';
 import '../../models/ride_model.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/loading_widget.dart';
+import '../rides/create_ride_screen.dart'; // ✅ Add import for CreateRideScreen
 
 class RidesScreen extends ConsumerStatefulWidget {
   const RidesScreen({super.key});
@@ -87,8 +88,10 @@ class _RidesScreenState extends ConsumerState<RidesScreen>
           isDriver ? _buildCompletedRidesTab() : _buildFavoritesTab(),
         ],
       ),
+      // ✅ FIXED: Add unique heroTag to prevent hero conflicts
       floatingActionButton: isDriver
           ? FloatingActionButton.extended(
+              heroTag: "rides_screen_fab", // ✅ Add unique hero tag
               onPressed: _createNewRide,
               backgroundColor: AppColors.primaryColor,
               icon: const Icon(Icons.add, color: Colors.white),
@@ -780,7 +783,11 @@ class _RidesScreenState extends ConsumerState<RidesScreen>
   // ✅ FIXED: Helper methods with proper fallback for driver info
   bool _getUserIsDriver(dynamic user) {
     if (user == null) return false;
-    return user.isDriver ?? false;
+    try {
+      return user.isDriver ?? false;
+    } catch (e) {
+      return false;
+    }
   }
 
   Color _getRideTypeColor(bool isFemaleOnly) {
@@ -788,24 +795,27 @@ class _RidesScreenState extends ConsumerState<RidesScreen>
   }
 
   String _formatDateTime(DateTime dateTime) {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
+    try {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final messageDate = DateTime(dateTime.year, dateTime.month, dateTime.day);
 
-    if (messageDate == today) {
-      return 'اليوم ${DateFormat('HH:mm', 'ar').format(dateTime)}';
-    } else if (messageDate == today.add(const Duration(days: 1))) {
-      return 'غداً ${DateFormat('HH:mm', 'ar').format(dateTime)}';
-    } else if (dateTime.difference(now).inDays < 7) {
-      return DateFormat('EEEE HH:mm', 'ar').format(dateTime);
-    } else {
-      return DateFormat('dd/MM/yyyy HH:mm', 'ar').format(dateTime);
+      if (messageDate == today) {
+        return 'اليوم ${DateFormat('HH:mm').format(dateTime)}';
+      } else if (messageDate == today.add(const Duration(days: 1))) {
+        return 'غداً ${DateFormat('HH:mm').format(dateTime)}';
+      } else if (dateTime.difference(now).inDays < 7) {
+        return DateFormat('EEEE HH:mm').format(dateTime);
+      } else {
+        return DateFormat('dd/MM/yyyy HH:mm').format(dateTime);
+      }
+    } catch (e) {
+      return DateFormat('dd/MM/yyyy HH:mm').format(dateTime);
     }
   }
 
   // ✅ FIXED: Driver helper methods with proper fallback
   ImageProvider? _getDriverProfileImage(Ride ride) {
-    // Try multiple possible property names for driver profile image
     String? imageUrl;
     
     try {
@@ -815,7 +825,6 @@ class _RidesScreenState extends ConsumerState<RidesScreen>
                  (ride as dynamic).driverProfileImage ??
                  (ride as dynamic).profileImage;
     } catch (e) {
-      // Property doesn't exist, return null
       imageUrl = null;
     }
     
@@ -861,9 +870,10 @@ class _RidesScreenState extends ConsumerState<RidesScreen>
   double? _getDriverRating(Ride ride) {
     try {
       // Try different possible property paths for driver rating
-      return (ride as dynamic).driverInfo?.rating ??
-             (ride as dynamic).driver?.rating ??
-             (ride as dynamic).driverRating;
+      final rating = (ride as dynamic).driverInfo?.rating ??
+                     (ride as dynamic).driver?.rating ??
+                     (ride as dynamic).driverRating;
+      return rating?.toDouble();
     } catch (e) {
       return null;
     }
@@ -882,7 +892,8 @@ class _RidesScreenState extends ConsumerState<RidesScreen>
   }
 
   void _onRideTap(Ride ride) {
-    Navigator.of(context).pushNamed('/ride-details', arguments: ride.id);
+    // Navigate to ride details screen
+    // Navigator.of(context).pushNamed('/ride-details', arguments: ride.id);
   }
 
   void _bookRide(Ride ride) {
@@ -1116,7 +1127,7 @@ class _RidesScreenState extends ConsumerState<RidesScreen>
         pickupLocation: pickupLocation,
         pickupLatitude: 0.0,
         pickupLongitude: 0.0,
-        specialRequests: notes,
+        notes: notes,
       );
 
       // Dismiss loading dialog
@@ -1191,7 +1202,8 @@ class _RidesScreenState extends ConsumerState<RidesScreen>
 
   // Driver ride management methods
   void _editRide(Ride ride) {
-    Navigator.of(context).pushNamed('/edit-ride', arguments: ride.id);
+    // Navigate to edit ride screen
+    // Navigator.of(context).pushNamed('/edit-ride', arguments: ride.id);
   }
 
   void _cancelRide(Ride ride) {
@@ -1356,8 +1368,18 @@ class _RidesScreenState extends ConsumerState<RidesScreen>
     );
   }
 
+  // ✅ FIXED: Navigate to CreateRideScreen using MaterialPageRoute
   void _createNewRide() {
-    Navigator.of(context).pushNamed('/create-ride');
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const CreateRideScreen(),
+      ),
+    ).then((result) {
+      // Refresh rides if a ride was created
+      if (result == true) {
+        ref.read(myRidesProvider.notifier).loadMyRides(refresh: true);
+      }
+    });
   }
 
   @override

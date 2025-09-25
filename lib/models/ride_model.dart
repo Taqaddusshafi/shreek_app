@@ -53,20 +53,20 @@ class Ride {
 
   factory Ride.fromJson(Map<String, dynamic> json) {
     return Ride(
-      id: json['id'],
-      driverId: json['driverId'],
+      id: json['id'] ?? 0,
+      driverId: json['driverId'] ?? 0,
       driverName: json['driverName'] ?? '',
       driverPhone: json['driverPhone'],
       driverRating: json['driverRating']?.toDouble(),
-      fromCity: json['fromCity'],
+      fromCity: json['fromCity'] ?? '',
       fromAddress: json['fromAddress'] ?? '',
       fromLatitude: json['fromLatitude']?.toDouble() ?? 0.0,
       fromLongitude: json['fromLongitude']?.toDouble() ?? 0.0,
-      toCity: json['toCity'],
+      toCity: json['toCity'] ?? '',
       toAddress: json['toAddress'] ?? '',
       toLatitude: json['toLatitude']?.toDouble() ?? 0.0,
       toLongitude: json['toLongitude']?.toDouble() ?? 0.0,
-      departureTime: DateTime.parse(json['departureTime']),
+      departureTime: DateTime.tryParse(json['departureTime'] ?? '') ?? DateTime.now(),
       availableSeats: json['availableSeats'] ?? json['seatsAvailable'] ?? 0,
       seatsAvailable: json['seatsAvailable'] ?? json['availableSeats'] ?? 0,
       pricePerSeat: json['pricePerSeat']?.toDouble() ?? json['price']?.toDouble() ?? 0.0,
@@ -78,8 +78,8 @@ class Ride {
               .map((stop) => StopPoint.fromJson(stop))
               .toList()
           : [],
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
+      updatedAt: DateTime.tryParse(json['updatedAt'] ?? '') ?? DateTime.now(),
     );
   }
 
@@ -111,7 +111,7 @@ class Ride {
     };
   }
 
-  // ✅ FIXED: Legacy compatibility getters
+  // Legacy compatibility getters
   String get fromLocation => fromCity;
   String get toLocation => toCity;
   double get price => pricePerSeat;
@@ -122,7 +122,7 @@ class Ride {
   String get departureTimeString => 
       '${departureTime.hour.toString().padLeft(2, '0')}:${departureTime.minute.toString().padLeft(2, '0')}';
 
-  // ✅ FIXED: Driver object - simplified without circular dependency
+  // Driver object - simplified without circular dependency
   DriverInfo get driver => DriverInfo(
     id: driverId,
     firstName: driverName.split(' ').first,
@@ -130,7 +130,7 @@ class Ride {
     fullName: driverName,
     name: driverName,
     rating: driverRating,
-    profileImage: null, // Add if available from API
+    profileImage: null,
   );
 
   // Helper methods for UI
@@ -239,7 +239,7 @@ class Ride {
   }
 }
 
-// ✅ NEW: Simple driver info class to avoid circular dependency
+// Simple driver info class to avoid circular dependency
 class DriverInfo {
   final int id;
   final String firstName;
@@ -295,11 +295,11 @@ class StopPoint {
       address: json['address'] ?? '',
       latitude: json['latitude']?.toDouble() ?? 0.0,
       longitude: json['longitude']?.toDouble() ?? 0.0,
-      estimatedArrivalTime: DateTime.parse(json['estimatedArrivalTime']),
-      estimatedDepartureTime: DateTime.parse(json['estimatedDepartureTime']),
+      estimatedArrivalTime: DateTime.tryParse(json['estimatedArrivalTime'] ?? '') ?? DateTime.now(),
+      estimatedDepartureTime: DateTime.tryParse(json['estimatedDepartureTime'] ?? '') ?? DateTime.now(),
       notes: json['notes'],
       order: json['order'] ?? 0,
-      createdAt: DateTime.parse(json['createdAt']),
+      createdAt: DateTime.tryParse(json['createdAt'] ?? '') ?? DateTime.now(),
     );
   }
 
@@ -325,60 +325,116 @@ class StopPoint {
   String get fullAddress => '$cityName - $address';
 }
 
-// ✅ FIXED: SearchParameters class
+// SearchParameters class
 class SearchParameters {
-  final String from;
-  final String to;
-  final String? date;
+  final String fromCity;
+  final String toCity;
+  final String? departureDate;
   final int? passengers;
   final bool? isFemaleOnly;
   final double? maxPrice;
+  final double? minPrice;
+  final String? departureTime;
   final int? limit;
   final int? offset;
+  final String? sortBy;
+  final String? sortOrder;
 
   SearchParameters({
-    required this.from,
-    required this.to,
-    this.date,
+    required this.fromCity,
+    required this.toCity,
+    this.departureDate,
     this.passengers,
     this.isFemaleOnly,
     this.maxPrice,
+    this.minPrice,
+    this.departureTime,
     this.limit,
     this.offset,
+    this.sortBy,
+    this.sortOrder,
   });
 
   Map<String, dynamic> toMap() {
     return {
-      'fromCity': from,
-      'toCity': to,
-      if (date != null) 'departureDate': date,
+      'fromCity': fromCity,
+      'toCity': toCity,
+      if (departureDate != null) 'departureDate': departureDate,
       if (passengers != null) 'passengers': passengers,
       if (isFemaleOnly != null) 'isFemaleOnly': isFemaleOnly,
       if (maxPrice != null) 'maxPrice': maxPrice,
+      if (minPrice != null) 'minPrice': minPrice,
+      if (departureTime != null) 'departureTime': departureTime,
       if (limit != null) 'limit': limit,
       if (offset != null) 'offset': offset,
+      if (sortBy != null) 'sortBy': sortBy,
+      if (sortOrder != null) 'sortOrder': sortOrder,
     };
   }
 
   SearchParameters copyWith({
-    String? from,
-    String? to,
-    String? date,
+    String? fromCity,
+    String? toCity,
+    String? departureDate,
     int? passengers,
     bool? isFemaleOnly,
     double? maxPrice,
+    double? minPrice,
+    String? departureTime,
     int? limit,
     int? offset,
+    String? sortBy,
+    String? sortOrder,
   }) {
     return SearchParameters(
-      from: from ?? this.from,
-      to: to ?? this.to,
-      date: date ?? this.date,
+      fromCity: fromCity ?? this.fromCity,
+      toCity: toCity ?? this.toCity,
+      departureDate: departureDate ?? this.departureDate,
       passengers: passengers ?? this.passengers,
       isFemaleOnly: isFemaleOnly ?? this.isFemaleOnly,
       maxPrice: maxPrice ?? this.maxPrice,
+      minPrice: minPrice ?? this.minPrice,
+      departureTime: departureTime ?? this.departureTime,
       limit: limit ?? this.limit,
       offset: offset ?? this.offset,
+      sortBy: sortBy ?? this.sortBy,
+      sortOrder: sortOrder ?? this.sortOrder,
     );
+  }
+}
+
+// Create Ride Request matching your API exactly
+class CreateRideRequest {
+  final Map<String, dynamic> from;
+  final Map<String, dynamic> to;
+  final String departureTime;
+  final int availableSeats;
+  final double price;
+  final String? description;
+  final bool isFemaleOnly;
+  final List<Map<String, dynamic>>? stopPoints;
+
+  CreateRideRequest({
+    required this.from,
+    required this.to,
+    required this.departureTime,
+    required this.availableSeats,
+    required this.price,
+    this.description,
+    this.isFemaleOnly = false,
+    this.stopPoints,
+  });
+
+  Map<String, dynamic> toJson() {
+    return {
+      'from': from,
+      'to': to,
+      'departureTime': departureTime,
+      'availableSeats': availableSeats,
+      'price': price,
+      if (description != null && description!.isNotEmpty) 'description': description,
+      'isFemaleOnly': isFemaleOnly,
+      if (stopPoints != null && stopPoints!.isNotEmpty) 'stopPoints': stopPoints,
+    };
   }
 }

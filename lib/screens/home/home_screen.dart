@@ -4,10 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/ride_provider.dart' as RideProvider;
 import '../../providers/booking_provider.dart';
-import '../../models/ride_model.dart' hide SearchParameters;
+import '../../models/ride_model.dart'; // ✅ Fixed: Import ride_model.dart directly for SearchParameters
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/custom_button.dart';
 import '../../core/widgets/custom_text_field.dart';
+import '../rides/create_ride_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -47,7 +48,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       body: RefreshIndicator(
         onRefresh: () async {
           if (authState.isAuthenticated) {
-            await ref.read(myBookingsProvider.notifier).loadMyBookings();
+            await Future.wait([
+              ref.read(myBookingsProvider.notifier).loadMyBookings(refresh: true),
+              if (_getUserIsDriver(user)) ref.read(RideProvider.myRidesProvider.notifier).loadMyRides(refresh: true),
+            ]);
           }
         },
         color: AppColors.primaryColor,
@@ -97,16 +101,19 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ),
                               const Spacer(),
                               if (user != null) ...[
-                                CircleAvatar(
-                                  radius: 18,
-                                  backgroundImage: _getUserProfileImage(user),
-                                  backgroundColor: Colors.white.withOpacity(0.2),
-                                  child: _getUserProfileImage(user) == null
-                                      ? Text(
-                                          _getUserInitial(user),
-                                          style: const TextStyle(color: Colors.white),
-                                        )
-                                      : null,
+                                GestureDetector(
+                                  onTap: () => _showProfileMenu(context),
+                                  child: CircleAvatar(
+                                    radius: 18,
+                                    backgroundImage: _getUserProfileImage(user),
+                                    backgroundColor: Colors.white.withOpacity(0.2),
+                                    child: _getUserProfileImage(user) == null
+                                        ? Text(
+                                            _getUserInitial(user),
+                                            style: const TextStyle(color: Colors.white),
+                                          )
+                                        : null,
+                                  ),
                                 ),
                               ],
                             ],
@@ -238,21 +245,21 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               const SizedBox(height: 12),
               InkWell(
                 onTap: _selectDate,
-                child: CustomTextField(
-                  controller: _dateController,
-                  labelText: 'التاريخ',
-                  hintText: 'اختر تاريخ السفر',
-                  prefixIcon: Icons.calendar_today,
-                  enabled: false,
-                  maxLength: 50,
-                  style: const TextStyle(fontSize: 16),
+                child: IgnorePointer(
+                  child: CustomTextField(
+                    controller: _dateController,
+                    labelText: 'التاريخ',
+                    hintText: 'اختر تاريخ السفر',
+                    prefixIcon: Icons.calendar_today,
+                    maxLength: 50,
+                    style: const TextStyle(fontSize: 16),
+                  ),
                 ),
               ),
               const SizedBox(height: 20),
               CustomButton(
                 text: 'البحث',
                 onPressed: _searchRides,
-                icon: Icons.search,
               ),
             ],
           ),
@@ -310,6 +317,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ),
               ],
             ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildQuickActionButton(
+                    'حجوزات الرحلات',
+                    Icons.event_note,
+                    Colors.green,
+                    () => _viewDriverBookings(),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: _buildQuickActionButton(
+                    'إحصائيات',
+                    Icons.analytics,
+                    Colors.orange,
+                    () => _viewStats(),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
@@ -356,13 +385,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       builder: (context, ref, child) {
         final bookingsState = ref.watch(myBookingsProvider);
         
-        // ✅ FIXED: Safe filtering of bookings
         final upcomingBookings = bookingsState.bookings
             .where((b) => _isUpcomingBooking(b))
             .take(3)
             .toList();
 
-        if (upcomingBookings.isEmpty) {
+        if (upcomingBookings.isEmpty && !bookingsState.isLoading) {
           return const SizedBox();
         }
 
@@ -400,17 +428,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ],
             ),
             const SizedBox(height: 8),
-            SizedBox(
-              height: 120,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                itemCount: upcomingBookings.length,
-                itemBuilder: (context, index) {
-                  final booking = upcomingBookings[index];
-                  return _buildBookingCard(booking);
-                },
+            if (bookingsState.isLoading) ...[
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(32.0),
+                  child: CircularProgressIndicator(),
+                ),
               ),
-            ),
+            ] else if (upcomingBookings.isNotEmpty) ...[
+              SizedBox(
+                height: 120,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: upcomingBookings.length,
+                  itemBuilder: (context, index) {
+                    final booking = upcomingBookings[index];
+                    return _buildBookingCard(booking);
+                  },
+                ),
+              ),
+            ],
           ],
         );
       },
@@ -444,14 +481,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      'حجز #${_getBookingId(booking)}',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.bold,
+                    Expanded(
+                      child: Text(
+                        'حجز #${_getBookingId(booking)}',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
@@ -614,6 +653,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       {'from': 'الرياض', 'to': 'جدة', 'price': '150', 'rides': '45'},
       {'from': 'الدمام', 'to': 'الرياض', 'price': '120', 'rides': '32'},
       {'from': 'مكة', 'to': 'المدينة', 'price': '100', 'rides': '28'},
+      {'from': 'الطائف', 'to': 'الرياض', 'price': '140', 'rides': '25'},
+      {'from': 'القصيم', 'to': 'الرياض', 'price': '90', 'rides': '18'},
     ];
 
     return Column(
@@ -692,7 +733,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // ✅ FIXED: Helper methods for safe user property access
+  // ✅ Helper methods for safe user property access
   ImageProvider? _getUserProfileImage(dynamic user) {
     if (user == null) return null;
     try {
@@ -782,7 +823,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  // ✅ FIXED: Booking helper methods with safe property access
+  // ✅ Booking helper methods with safe property access
   bool _isUpcomingBooking(dynamic booking) {
     try {
       final status = booking.status ?? '';
@@ -802,7 +843,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   String _getBookingLocation(dynamic booking) {
     try {
-      return booking.pickupLocation ?? 'مكان الانطلاق';
+      return booking.pickupLocation ?? 
+             booking.fromLocation ?? 
+             booking.ride?.fromCity ?? 
+             booking.rideFromCity ?? 
+             'مكان الانطلاق';
     } catch (e) {
       return 'مكان الانطلاق';
     }
@@ -846,6 +891,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           return Colors.red;
         case 'completed':
           return Colors.blue;
+        case 'rejected':
+          return Colors.red.shade300;
         default:
           return AppColors.textSecondary;
       }
@@ -864,6 +911,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         return 'ملغى';
       case 'completed':
         return 'مكتمل';
+      case 'rejected':
+        return 'مرفوض';
       default:
         return status;
     }
@@ -898,7 +947,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  // ✅ FIXED: _searchRides method with correct parameter names
+  // ✅ FIXED: _searchRides method with correct SearchParameters usage
   void _searchRides() {
     if (_fromController.text.isEmpty || _toController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -920,12 +969,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
 
-    // ✅ FIXED: Use correct parameter names for SearchParameters
-    final searchParams = RideProvider.SearchParameters(
+    // ✅ FIXED: Use SearchParameters directly from ride_model.dart
+    final searchParams = SearchParameters(
       fromCity: _fromController.text.trim(),
       toCity: _toController.text.trim(),
       departureDate: _selectedDate?.toIso8601String().split('T')[0],
-      limit: 20, // Optional: Set a reasonable limit
+      limit: 20,
     );
 
     ref.read(RideProvider.rideSearchProvider.notifier).searchRides(searchParams);
@@ -956,21 +1005,152 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _createRide() {
-    Navigator.of(context).pushNamed('/create-ride');
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => const CreateRideScreen(),
+      ),
+    ).then((result) {
+      if (result == true) {
+        ref.read(RideProvider.myRidesProvider.notifier).loadMyRides(refresh: true);
+      }
+    });
   }
 
   void _viewMyRides() {
     final tabController = DefaultTabController.of(context);
     if (tabController != null) {
-      tabController.animateTo(1); // Navigate to rides tab
+      tabController.animateTo(1);
     }
   }
 
   void _viewAllBookings() {
     final tabController = DefaultTabController.of(context);
     if (tabController != null) {
-      tabController.animateTo(2); // Navigate to bookings tab
+      tabController.animateTo(2);
     }
+  }
+
+  void _viewDriverBookings() {
+    ref.read(myBookingsProvider.notifier).loadDriverBookings(refresh: true);
+    
+    final tabController = DefaultTabController.of(context);
+    if (tabController != null) {
+      tabController.animateTo(2);
+    }
+  }
+
+  void _viewStats() {
+    ref.read(myBookingsProvider.notifier).loadBookingStats();
+    _showStatsBottomSheet();
+  }
+
+  void _showStatsBottomSheet() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Consumer(
+        builder: (context, ref, child) {
+          final stats = ref.watch(bookingStatsProvider);
+          
+          return Container(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'إحصائيات سريعة',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                if (stats != null) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      _buildStatItem('إجمالي الحجوزات', stats['totalBookings']?.toString() ?? '0'),
+                      _buildStatItem('الحجوزات المؤكدة', stats['confirmedBookings']?.toString() ?? '0'),
+                      _buildStatItem('الحجوزات المكتملة', stats['completedBookings']?.toString() ?? '0'),
+                    ],
+                  ),
+                ] else ...[
+                  const CircularProgressIndicator(),
+                ],
+                const SizedBox(height: 20),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildStatItem(String label, String value) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: AppColors.primaryColor,
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: const TextStyle(
+            fontSize: 12,
+            color: AppColors.textSecondary,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
+    );
+  }
+
+  void _showProfileMenu(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+      ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.person),
+              title: const Text('الملف الشخصي'),
+              onTap: () {
+                Navigator.pop(context);
+                // Navigate to profile
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.settings),
+              title: const Text('الإعدادات'),
+              onTap: () {
+                Navigator.pop(context);
+                // Navigate to settings
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout),
+              title: const Text('تسجيل الخروج'),
+              onTap: () {
+                Navigator.pop(context);
+                ref.read(authProvider.notifier).logout();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override

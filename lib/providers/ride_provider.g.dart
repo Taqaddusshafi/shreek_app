@@ -6,7 +6,7 @@ part of 'ride_provider.dart';
 // RiverpodGenerator
 // **************************************************************************
 
-String _$getRideHash() => r'a30daa59919279990b9d3722282b44383da147a4';
+String _$getRideHash() => r'fa33c0a923eda907c11a2efe650c9234f5dac926';
 
 /// Copied from Dart SDK
 class _SystemHash {
@@ -156,138 +156,7 @@ class _GetRideProviderElement extends AutoDisposeFutureProviderElement<Ride?>
   int get rideId => (origin as GetRideProvider).rideId;
 }
 
-String _$getRideStopsHash() => r'f33d5ef7337ce93c19ef797371a57e14cadbf31b';
-
-/// See also [getRideStops].
-@ProviderFor(getRideStops)
-const getRideStopsProvider = GetRideStopsFamily();
-
-/// See also [getRideStops].
-class GetRideStopsFamily extends Family<AsyncValue<List<StopPoint>>> {
-  /// See also [getRideStops].
-  const GetRideStopsFamily();
-
-  /// See also [getRideStops].
-  GetRideStopsProvider call(
-    int rideId,
-  ) {
-    return GetRideStopsProvider(
-      rideId,
-    );
-  }
-
-  @override
-  GetRideStopsProvider getProviderOverride(
-    covariant GetRideStopsProvider provider,
-  ) {
-    return call(
-      provider.rideId,
-    );
-  }
-
-  static const Iterable<ProviderOrFamily>? _dependencies = null;
-
-  @override
-  Iterable<ProviderOrFamily>? get dependencies => _dependencies;
-
-  static const Iterable<ProviderOrFamily>? _allTransitiveDependencies = null;
-
-  @override
-  Iterable<ProviderOrFamily>? get allTransitiveDependencies =>
-      _allTransitiveDependencies;
-
-  @override
-  String? get name => r'getRideStopsProvider';
-}
-
-/// See also [getRideStops].
-class GetRideStopsProvider extends AutoDisposeFutureProvider<List<StopPoint>> {
-  /// See also [getRideStops].
-  GetRideStopsProvider(
-    int rideId,
-  ) : this._internal(
-          (ref) => getRideStops(
-            ref as GetRideStopsRef,
-            rideId,
-          ),
-          from: getRideStopsProvider,
-          name: r'getRideStopsProvider',
-          debugGetCreateSourceHash:
-              const bool.fromEnvironment('dart.vm.product')
-                  ? null
-                  : _$getRideStopsHash,
-          dependencies: GetRideStopsFamily._dependencies,
-          allTransitiveDependencies:
-              GetRideStopsFamily._allTransitiveDependencies,
-          rideId: rideId,
-        );
-
-  GetRideStopsProvider._internal(
-    super._createNotifier, {
-    required super.name,
-    required super.dependencies,
-    required super.allTransitiveDependencies,
-    required super.debugGetCreateSourceHash,
-    required super.from,
-    required this.rideId,
-  }) : super.internal();
-
-  final int rideId;
-
-  @override
-  Override overrideWith(
-    FutureOr<List<StopPoint>> Function(GetRideStopsRef provider) create,
-  ) {
-    return ProviderOverride(
-      origin: this,
-      override: GetRideStopsProvider._internal(
-        (ref) => create(ref as GetRideStopsRef),
-        from: from,
-        name: null,
-        dependencies: null,
-        allTransitiveDependencies: null,
-        debugGetCreateSourceHash: null,
-        rideId: rideId,
-      ),
-    );
-  }
-
-  @override
-  AutoDisposeFutureProviderElement<List<StopPoint>> createElement() {
-    return _GetRideStopsProviderElement(this);
-  }
-
-  @override
-  bool operator ==(Object other) {
-    return other is GetRideStopsProvider && other.rideId == rideId;
-  }
-
-  @override
-  int get hashCode {
-    var hash = _SystemHash.combine(0, runtimeType.hashCode);
-    hash = _SystemHash.combine(hash, rideId.hashCode);
-
-    return _SystemHash.finish(hash);
-  }
-}
-
-@Deprecated('Will be removed in 3.0. Use Ref instead')
-// ignore: unused_element
-mixin GetRideStopsRef on AutoDisposeFutureProviderRef<List<StopPoint>> {
-  /// The parameter `rideId` of this provider.
-  int get rideId;
-}
-
-class _GetRideStopsProviderElement
-    extends AutoDisposeFutureProviderElement<List<StopPoint>>
-    with GetRideStopsRef {
-  _GetRideStopsProviderElement(super.provider);
-
-  @override
-  int get rideId => (origin as GetRideStopsProvider).rideId;
-}
-
-String _$rideSearchHash() => r'bd8bc59e7408d1633a0f7118e58f9048efca27b4';
+String _$rideSearchHash() => r'76a2bc4b4351bf3a5f5736bf34ef8611507ee7c4';
 
 /// See also [RideSearch].
 @ProviderFor(RideSearch)
@@ -302,7 +171,7 @@ final rideSearchProvider =
 );
 
 typedef _$RideSearch = AutoDisposeNotifier<RideState>;
-String _$myRidesHash() => r'9a3f88febccf1dc6a62480a8f1d95e6998071e19';
+String _$myRidesHash() => r'12f81924f375bed645713f22edef479aa972e07a';
 
 /// See also [MyRides].
 @ProviderFor(MyRides)

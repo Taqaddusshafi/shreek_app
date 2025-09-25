@@ -10,7 +10,7 @@ class ApiService {
 
   ApiService(this._dioClient);
 
-  // ✅ Auth APIs - Updated for new API
+  // ✅ AUTH APIs - Updated for new API
   Future<Response> loginWithPassword(String email, String password) {
     return _dioClient.dio.post(
       ApiConstants.login,
@@ -76,7 +76,11 @@ class ApiService {
     );
   }
 
-  // ✅ Phone Verification APIs
+  Future<Response> logout() {
+    return _dioClient.dio.post(ApiConstants.logout);
+  }
+
+  // ✅ PHONE VERIFICATION APIs
   Future<Response> sendPhoneOTP(String phone) {
     return _dioClient.dio.post(
       ApiConstants.sendPhoneOTP,
@@ -91,7 +95,7 @@ class ApiService {
     );
   }
 
-  // ✅ Password Reset APIs
+  // ✅ PASSWORD RESET APIs
   Future<Response> forgotPassword(String email) {
     return _dioClient.dio.post(
       ApiConstants.forgotPassword,
@@ -113,7 +117,7 @@ class ApiService {
     );
   }
 
-  // ✅ Ride APIs - Updated for new API structure
+  // ✅ RIDE APIs - Fixed endpoints
   Future<Response> searchRides(Map<String, dynamic> params) {
     return _dioClient.dio.get(
       ApiConstants.searchRides,
@@ -130,34 +134,43 @@ class ApiService {
   }
 
   Future<Response> getRide(int rideId) {
-    return _dioClient.dio.get('${ApiConstants.rides}/$rideId');
+    return _dioClient.dio.get(ApiConstants.rideById(rideId));
   }
 
+  // ✅ Fixed: Use userRides endpoint for driver's rides
   Future<Response> getMyRides({Map<String, dynamic>? params}) {
     return _dioClient.dio.get(
-      ApiConstants.rides,
+      ApiConstants.userRides,
       queryParameters: params,
     );
   }
 
   Future<Response> updateRide(int rideId, Map<String, dynamic> rideData) {
-    return _dioClient.dio.put('${ApiConstants.rides}/$rideId', data: rideData);
+    return _dioClient.dio.put(ApiConstants.updateRideById(rideId), data: rideData);
   }
 
   Future<Response> cancelRide(int rideId) {
-    return _dioClient.dio.delete('${ApiConstants.rides}/$rideId');
+    return _dioClient.dio.delete(ApiConstants.deleteRideById(rideId));
   }
 
-  // ✅ Ride Stop Points APIs
+  Future<Response> startRide(int rideId) {
+    return _dioClient.dio.put(ApiConstants.startRideById(rideId));
+  }
+
+  Future<Response> completeRide(int rideId) {
+    return _dioClient.dio.put(ApiConstants.completeRideById(rideId));
+  }
+
+  // ✅ RIDE STOP POINTS APIs - Fixed endpoints
   Future<Response> getRideStops(int rideId) {
-    return _dioClient.dio.get('${ApiConstants.rideStops}/$rideId/stops');
+    return _dioClient.dio.get(ApiConstants.rideStopsById(rideId));
   }
 
   Future<Response> addRideStop(int rideId, Map<String, dynamic> stopData) {
-    return _dioClient.dio.post('${ApiConstants.rideStops}/$rideId/stops', data: stopData);
+    return _dioClient.dio.post(ApiConstants.rideStopsById(rideId), data: stopData);
   }
 
-  // ✅ Booking APIs - Updated for new API structure
+  // ✅ BOOKING APIs - Fixed endpoints
   Future<Response> createBooking(Map<String, dynamic> bookingData) {
     return _dioClient.dio.post(ApiConstants.bookings, data: bookingData);
   }
@@ -177,52 +190,70 @@ class ApiService {
   }
 
   Future<Response> getBooking(int bookingId) {
-    return _dioClient.dio.get('${ApiConstants.bookings}/$bookingId');
+    return _dioClient.dio.get(ApiConstants.bookingById(bookingId));
   }
 
   Future<Response> updateBooking(int bookingId, Map<String, dynamic> bookingData) {
-    return _dioClient.dio.put('${ApiConstants.bookings}/$bookingId', data: bookingData);
+    return _dioClient.dio.put(ApiConstants.bookingById(bookingId), data: bookingData);
   }
 
   Future<Response> cancelBooking(int bookingId) {
-    return _dioClient.dio.delete('${ApiConstants.bookings}/$bookingId');
+    return _dioClient.dio.post(ApiConstants.cancelBookingById(bookingId));
   }
 
   Future<Response> acceptBooking(int bookingId, {String? notes}) {
     return _dioClient.dio.post(
-      '${ApiConstants.bookings}/$bookingId/accept',
+      ApiConstants.acceptBookingById(bookingId),
       data: {'notes': notes},
     );
   }
 
   Future<Response> rejectBooking(int bookingId, {String? notes}) {
     return _dioClient.dio.post(
-      '${ApiConstants.bookings}/$bookingId/reject',
+      ApiConstants.rejectBookingById(bookingId),
       data: {'notes': notes},
     );
   }
 
-  Future<Response> completeBooking(int bookingId) {
-    return _dioClient.dio.post('${ApiConstants.bookings}/$bookingId/complete');
+  Future<Response> confirmBooking(int bookingId) {
+    return _dioClient.dio.post(ApiConstants.confirmBookingById(bookingId));
   }
 
-  // ✅ Chat APIs - Updated for new API structure
-  Future<Response> getChatMessages({Map<String, dynamic>? params}) {
+  Future<Response> completeBooking(int bookingId) {
+    return _dioClient.dio.post(ApiConstants.completeBookingById(bookingId));
+  }
+
+  Future<Response> rateBooking(int bookingId, Map<String, dynamic> ratingData) {
+    return _dioClient.dio.post(
+      ApiConstants.rateBookingById(bookingId),
+      data: ratingData,
+    );
+  }
+
+  // ✅ CHAT APIs - Fixed endpoints
+  Future<Response> getChats({Map<String, dynamic>? params}) {
     return _dioClient.dio.get(
       ApiConstants.chat,
       queryParameters: params,
     );
   }
 
-  Future<Response> sendChatMessage(Map<String, dynamic> messageData) {
-    return _dioClient.dio.post(ApiConstants.chat, data: messageData);
+  Future<Response> getChatMessages(int chatId, {Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.chatMessagesById(chatId),
+      queryParameters: params,
+    );
+  }
+
+  Future<Response> sendChatMessage(int chatId, Map<String, dynamic> messageData) {
+    return _dioClient.dio.post(
+      ApiConstants.sendChatMessageById(chatId), 
+      data: messageData,
+    );
   }
 
   Future<Response> createChatForBooking(int bookingId) {
-    return _dioClient.dio.post(
-      ApiConstants.createChatForBooking,
-      data: {'bookingId': bookingId},
-    );
+    return _dioClient.dio.post(ApiConstants.createChatForBookingById(bookingId));
   }
 
   Future<Response> getChatUnreadCount() {
@@ -230,10 +261,14 @@ class ApiService {
   }
 
   Future<Response> markChatAsRead(int chatId) {
-    return _dioClient.dio.patch('${ApiConstants.chat}/$chatId/read');
+    return _dioClient.dio.put(ApiConstants.markChatReadById(chatId));
   }
 
-  // ✅ Notification APIs - Updated for new notification system
+  Future<Response> deleteChat(int chatId) {
+    return _dioClient.dio.delete(ApiConstants.deleteChatById(chatId));
+  }
+
+  // ✅ NOTIFICATION APIs - Fixed endpoints
   Future<Response> getNotifications({Map<String, dynamic>? params}) {
     return _dioClient.dio.get(
       ApiConstants.notifications,
@@ -242,19 +277,23 @@ class ApiService {
   }
 
   Future<Response> getNotificationById(int notificationId) {
-    return _dioClient.dio.get('${ApiConstants.notifications}/$notificationId');
+    return _dioClient.dio.get(ApiConstants.notificationById(notificationId));
   }
 
   Future<Response> markNotificationAsRead(int notificationId) {
-    return _dioClient.dio.patch('${ApiConstants.notifications}/$notificationId/read');
+    return _dioClient.dio.put(ApiConstants.markNotificationReadById(notificationId));
+  }
+
+  Future<Response> markNotificationAsUnread(int notificationId) {
+    return _dioClient.dio.put(ApiConstants.markNotificationUnreadById(notificationId));
   }
 
   Future<Response> markAllNotificationsAsRead() {
-    return _dioClient.dio.patch('${ApiConstants.notifications}/read-all');
+    return _dioClient.dio.put('${ApiConstants.notifications}/read-all');
   }
 
   Future<Response> deleteNotification(int notificationId) {
-    return _dioClient.dio.delete('${ApiConstants.notifications}/$notificationId');
+    return _dioClient.dio.delete(ApiConstants.deleteNotificationById(notificationId));
   }
 
   Future<Response> getNotificationUnreadCount() {
@@ -265,7 +304,7 @@ class ApiService {
     return _dioClient.dio.post(ApiConstants.testNotification);
   }
 
-  // ✅ Legacy Notification APIs (if still needed)
+  // ✅ LEGACY NOTIFICATION APIs
   Future<Response> getLegacyNotifications({Map<String, dynamic>? params}) {
     return _dioClient.dio.get(
       ApiConstants.legacyNotifications,
@@ -273,11 +312,23 @@ class ApiService {
     );
   }
 
+  Future<Response> getLegacyNotificationById(int notificationId) {
+    return _dioClient.dio.get(ApiConstants.legacyNotificationById(notificationId));
+  }
+
+  Future<Response> markLegacyNotificationAsRead(int notificationId) {
+    return _dioClient.dio.put(ApiConstants.markLegacyNotificationReadById(notificationId));
+  }
+
+  Future<Response> deleteLegacyNotification(int notificationId) {
+    return _dioClient.dio.delete(ApiConstants.deleteLegacyNotificationById(notificationId));
+  }
+
   Future<Response> getLegacyUnreadCount() {
     return _dioClient.dio.get(ApiConstants.legacyUnreadCount);
   }
 
-  // ✅ Admin Conversation APIs
+  // ✅ ADMIN CONVERSATION APIs
   Future<Response> getAdminConversations({Map<String, dynamic>? params}) {
     return _dioClient.dio.get(
       ApiConstants.adminConversations,
@@ -285,33 +336,131 @@ class ApiService {
     );
   }
 
-  Future<Response> getAdminMessagesUnreadCount() {
-    return _dioClient.dio.get(ApiConstants.adminMessagesUnreadCount);
-  }
-
-  // ✅ Rating & Review APIs
-  Future<Response> createRating(Map<String, dynamic> ratingData) {
-    return _dioClient.dio.post(ApiConstants.ratings, data: ratingData);
-  }
-
-  Future<Response> createReview(Map<String, dynamic> reviewData) {
-    return _dioClient.dio.post(ApiConstants.reviews, data: reviewData);
-  }
-
-  Future<Response> getUserRatings(int userId, {Map<String, dynamic>? params}) {
+  Future<Response> getConversationMessages(int adminId, {Map<String, dynamic>? params}) {
     return _dioClient.dio.get(
-      ApiConstants.userRatings.replaceAll('{userId}', userId.toString()),
+      ApiConstants.conversationMessagesById(adminId),
       queryParameters: params,
     );
   }
 
-  // ✅ Document Management APIs
+  Future<Response> sendConversationMessage(int adminId, Map<String, dynamic> messageData) {
+    return _dioClient.dio.post(
+      ApiConstants.sendConversationMessageById(adminId),
+      data: messageData,
+    );
+  }
+
+  Future<Response> markConversationAsRead(int adminId) {
+    return _dioClient.dio.put(ApiConstants.markConversationReadById(adminId));
+  }
+
+  Future<Response> getAdminMessagesUnreadCount() {
+    return _dioClient.dio.get(ApiConstants.adminMessagesUnreadCount);
+  }
+
+  // ✅ RATING & REVIEW APIs - Fixed endpoints
+  Future<Response> createRating(Map<String, dynamic> ratingData) {
+    return _dioClient.dio.post(ApiConstants.ratings, data: ratingData);
+  }
+
+  Future<Response> getRating(int ratingId) {
+    return _dioClient.dio.get(ApiConstants.ratingById(ratingId));
+  }
+
+  Future<Response> updateRating(int ratingId, Map<String, dynamic> ratingData) {
+    return _dioClient.dio.put(ApiConstants.updateRatingById(ratingId), data: ratingData);
+  }
+
+  Future<Response> deleteRating(int ratingId) {
+    return _dioClient.dio.delete(ApiConstants.deleteRatingById(ratingId));
+  }
+
+  Future<Response> getGivenRatings({Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.givenRatings,
+      queryParameters: params,
+    );
+  }
+
+  Future<Response> getReceivedRatings({Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.receivedRatings,
+      queryParameters: params,
+    );
+  }
+
+  Future<Response> getUserRatings(int userId, {Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.userRatingsById(userId),
+      queryParameters: params,
+    );
+  }
+
+  Future<Response> getRideRatings(int rideId, {Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.rideRatingsById(rideId),
+      queryParameters: params,
+    );
+  }
+
+  // ✅ REVIEW APIs
+  Future<Response> createReview(Map<String, dynamic> reviewData) {
+    return _dioClient.dio.post(ApiConstants.reviews, data: reviewData);
+  }
+
+  Future<Response> getReview(int reviewId) {
+    return _dioClient.dio.get(ApiConstants.reviewById(reviewId));
+  }
+
+  Future<Response> updateReview(int reviewId, Map<String, dynamic> reviewData) {
+    return _dioClient.dio.put(ApiConstants.updateReviewById(reviewId), data: reviewData);
+  }
+
+  Future<Response> deleteReview(int reviewId) {
+    return _dioClient.dio.delete(ApiConstants.deleteReviewById(reviewId));
+  }
+
+  Future<Response> getUserReviews(int userId, {Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.userReviewsById(userId),
+      queryParameters: params,
+    );
+  }
+
+  Future<Response> getRideReviews(int rideId, {Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.rideReviewsById(rideId),
+      queryParameters: params,
+    );
+  }
+
+  // ✅ DOCUMENT MANAGEMENT APIs
   Future<Response> uploadDocument(FormData formData) {
     return _dioClient.dio.post(ApiConstants.documentsUpload, data: formData);
   }
 
   Future<Response> getMyDocuments() {
     return _dioClient.dio.get(ApiConstants.myDocuments);
+  }
+
+  Future<Response> getDocument(int documentId) {
+    return _dioClient.dio.get(ApiConstants.documentById(documentId));
+  }
+
+  Future<Response> updateDocument(int documentId, Map<String, dynamic> documentData) {
+    return _dioClient.dio.put(ApiConstants.updateDocumentById(documentId), data: documentData);
+  }
+
+  Future<Response> deleteDocument(int documentId) {
+    return _dioClient.dio.delete(ApiConstants.deleteDocumentById(documentId));
+  }
+
+  Future<Response> getDocumentImage(String filename) {
+    return _dioClient.dio.get(ApiConstants.documentImageByFilename(filename));
+  }
+
+  Future<Response> getDocumentImageById(int documentId) {
+    return _dioClient.dio.get(ApiConstants.documentImageById(documentId));
   }
 
   Future<Response> getVerificationStatus() {
@@ -322,12 +471,59 @@ class ApiService {
     return _dioClient.dio.get(ApiConstants.requiredDocuments);
   }
 
-  // ✅ Real-time APIs
+  // ✅ USER PROFILE APIs
+  Future<Response> getUserProfile(int userId) {
+    return _dioClient.dio.get(ApiConstants.userProfileById(userId));
+  }
+
+  Future<Response> getUserRidesProfile(int userId, {Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.userRidesById(userId),
+      queryParameters: params,
+    );
+  }
+
+  Future<Response> getUserRatingsDetail(int userId, {Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.userRatingsDetailById(userId),
+      queryParameters: params,
+    );
+  }
+
+  Future<Response> blockUser(int userId) {
+    return _dioClient.dio.post(ApiConstants.blockUserById(userId));
+  }
+
+  Future<Response> unblockUser(int userId) {
+    return _dioClient.dio.post(ApiConstants.unblockUserById(userId));
+  }
+
+  Future<Response> reportUser(int userId, Map<String, dynamic> reportData) {
+    return _dioClient.dio.post(ApiConstants.reportUserById(userId), data: reportData);
+  }
+
+  // ✅ REAL-TIME APIs
   Future<Response> getRealtimeStatus() {
     return _dioClient.dio.get(ApiConstants.realtimeStatus);
   }
 
-  // ✅ Statistics APIs
+  Future<Response> getRealtimeChatStatus(int chatId) {
+    return _dioClient.dio.get(ApiConstants.realtimeChatById(chatId));
+  }
+
+  Future<Response> getRealtimeRideStatus(int rideId) {
+    return _dioClient.dio.get(ApiConstants.realtimeRideById(rideId));
+  }
+
+  Future<Response> getRealtimeNotifications(int userId) {
+    return _dioClient.dio.get(ApiConstants.realtimeNotificationsById(userId));
+  }
+
+  Future<Response> getRealtimeUserStatus(int userId) {
+    return _dioClient.dio.get(ApiConstants.realtimeUserStatus(userId));
+  }
+
+  // ✅ STATISTICS APIs
   Future<Response> getBookingStats() {
     return _dioClient.dio.get(ApiConstants.bookingStats);
   }
@@ -340,13 +536,106 @@ class ApiService {
     return _dioClient.dio.get(ApiConstants.notificationStats);
   }
 
-  // ✅ System APIs
+  // ✅ SYSTEM APIs
   Future<Response> healthCheck() {
     return _dioClient.dio.get(ApiConstants.health);
   }
 
-  Future<Response> logout() {
-    return _dioClient.dio.post(ApiConstants.logout);
+  // ✅ ADDITIONAL HELPER METHODS
+
+  // Get user's own ratings
+  Future<Response> getMyRatings({Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.userRatings,
+      queryParameters: params,
+    );
+  }
+
+  // Get all reviews
+  Future<Response> getAllReviews({Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.reviews,
+      queryParameters: params,
+    );
+  }
+
+  // Get all ratings
+  Future<Response> getAllRatings({Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.ratings,
+      queryParameters: params,
+    );
+  }
+
+  // Get all documents
+  Future<Response> getAllDocuments({Map<String, dynamic>? params}) {
+    return _dioClient.dio.get(
+      ApiConstants.documents,
+      queryParameters: params,
+    );
+  }
+
+  // Batch operations
+  Future<Response> markMultipleNotificationsAsRead(List<int> notificationIds) {
+    return _dioClient.dio.put(
+      '${ApiConstants.notifications}/batch-read',
+      data: {'notificationIds': notificationIds},
+    );
+  }
+
+  Future<Response> deleteMultipleNotifications(List<int> notificationIds) {
+    return _dioClient.dio.delete(
+      '${ApiConstants.notifications}/batch-delete',
+      data: {'notificationIds': notificationIds},
+    );
+  }
+
+  // Generic API call method for custom endpoints
+  Future<Response> customRequest(
+    String method,
+    String endpoint, {
+    Map<String, dynamic>? data,
+    Map<String, dynamic>? queryParameters,
+    Options? options,
+  }) {
+    switch (method.toUpperCase()) {
+      case 'GET':
+        return _dioClient.dio.get(
+          endpoint,
+          queryParameters: queryParameters,
+          options: options,
+        );
+      case 'POST':
+        return _dioClient.dio.post(
+          endpoint,
+          data: data,
+          queryParameters: queryParameters,
+          options: options,
+        );
+      case 'PUT':
+        return _dioClient.dio.put(
+          endpoint,
+          data: data,
+          queryParameters: queryParameters,
+          options: options,
+        );
+      case 'PATCH':
+        return _dioClient.dio.patch(
+          endpoint,
+          data: data,
+          queryParameters: queryParameters,
+          options: options,
+        );
+      case 'DELETE':
+        return _dioClient.dio.delete(
+          endpoint,
+          data: data,
+          queryParameters: queryParameters,
+          options: options,
+        );
+      default:
+        throw ArgumentError('Unsupported HTTP method: $method');
+    }
   }
 }
 

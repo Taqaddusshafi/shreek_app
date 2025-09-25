@@ -10,11 +10,12 @@ import '../main.dart';
 
 part 'ride_provider.g.dart';
 
-// ✅ ENHANCED: Ride State with comprehensive fields
+// Enhanced Ride State with comprehensive fields
 class RideState {
   final List<Ride> rides;
   final bool isLoading;
   final bool isLoadingMore;
+  final bool isCreating;
   final String? error;
   final int currentPage;
   final bool hasMore;
@@ -25,6 +26,7 @@ class RideState {
     this.rides = const [],
     this.isLoading = false,
     this.isLoadingMore = false,
+    this.isCreating = false,
     this.error,
     this.currentPage = 1,
     this.hasMore = true,
@@ -36,6 +38,7 @@ class RideState {
     List<Ride>? rides,
     bool? isLoading,
     bool? isLoadingMore,
+    bool? isCreating,
     String? error,
     int? currentPage,
     bool? hasMore,
@@ -46,6 +49,7 @@ class RideState {
       rides: rides ?? this.rides,
       isLoading: isLoading ?? this.isLoading,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      isCreating: isCreating ?? this.isCreating,
       error: error,
       currentPage: currentPage ?? this.currentPage,
       hasMore: hasMore ?? this.hasMore,
@@ -58,85 +62,7 @@ class RideState {
   bool get isEmpty => rides.isEmpty && !isLoading;
 }
 
-// ✅ ENHANCED: SearchParameters matching your API
-class SearchParameters {
-  final String fromCity;
-  final String toCity;
-  final String? departureDate;
-  final int? passengers;
-  final bool? isFemaleOnly;
-  final double? maxPrice;
-  final double? minPrice;
-  final String? departureTime;
-  final int? limit;
-  final int? offset;
-  final String? sortBy;
-  final String? sortOrder;
-
-  SearchParameters({
-    required this.fromCity,
-    required this.toCity,
-    this.departureDate,
-    this.passengers,
-    this.isFemaleOnly,
-    this.maxPrice,
-    this.minPrice,
-    this.departureTime,
-    this.limit,
-    this.offset,
-    this.sortBy,
-    this.sortOrder,
-  });
-
-  Map<String, dynamic> toMap() {
-    return {
-      'fromCity': fromCity,
-      'toCity': toCity,
-      if (departureDate != null) 'departureDate': departureDate,
-      if (passengers != null) 'passengers': passengers,
-      if (isFemaleOnly != null) 'isFemaleOnly': isFemaleOnly,
-      if (maxPrice != null) 'maxPrice': maxPrice,
-      if (minPrice != null) 'minPrice': minPrice,
-      if (departureTime != null) 'departureTime': departureTime,
-      if (limit != null) 'limit': limit,
-      if (offset != null) 'offset': offset,
-      if (sortBy != null) 'sortBy': sortBy,
-      if (sortOrder != null) 'sortOrder': sortOrder,
-    };
-  }
-
-  SearchParameters copyWith({
-    String? fromCity,
-    String? toCity,
-    String? departureDate,
-    int? passengers,
-    bool? isFemaleOnly,
-    double? maxPrice,
-    double? minPrice,
-    String? departureTime,
-    int? limit,
-    int? offset,
-    String? sortBy,
-    String? sortOrder,
-  }) {
-    return SearchParameters(
-      fromCity: fromCity ?? this.fromCity,
-      toCity: toCity ?? this.toCity,
-      departureDate: departureDate ?? this.departureDate,
-      passengers: passengers ?? this.passengers,
-      isFemaleOnly: isFemaleOnly ?? this.isFemaleOnly,
-      maxPrice: maxPrice ?? this.maxPrice,
-      minPrice: minPrice ?? this.minPrice,
-      departureTime: departureTime ?? this.departureTime,
-      limit: limit ?? this.limit,
-      offset: offset ?? this.offset,
-      sortBy: sortBy ?? this.sortBy,
-      sortOrder: sortOrder ?? this.sortOrder,
-    );
-  }
-}
-
-// ✅ FIXED: Ride Search Provider
+// Ride Search Provider
 @riverpod
 class RideSearch extends _$RideSearch {
   late DioClient _dioClient;
@@ -148,7 +74,7 @@ class RideSearch extends _$RideSearch {
     return RideState();
   }
 
-  // ✅ FIXED: Search rides according to your API
+  // Search rides according to your API
   Future<void> searchRides(SearchParameters params, {bool loadMore = false}) async {
     if (!loadMore) {
       state = state.copyWith(
@@ -158,6 +84,7 @@ class RideSearch extends _$RideSearch {
         searchParameters: params,
       );
     } else {
+      if (state.isLoadingMore || !state.hasMore) return;
       state = state.copyWith(isLoadingMore: true, error: null);
     }
 
@@ -168,20 +95,43 @@ class RideSearch extends _$RideSearch {
         'offset': params.offset ?? (loadMore ? state.currentPage * 20 : 0),
       };
 
+      if (kDebugMode) {
+        print('🔍 Searching rides with params: $queryParams');
+      }
+
       final response = await _dioClient.dio.get(
         ApiConstants.searchRides,
         queryParameters: queryParams,
       );
 
+      if (kDebugMode) {
+        print('📡 Search response status: ${response.statusCode}');
+        print('📄 Search response data: ${response.data}');
+      }
+
       if (response.statusCode == 200) {
-        final data = response.data['data'] ?? response.data;
-        final List<dynamic> ridesJson = data['rides'] ?? data ?? [];
-        final total = data['total'] ?? 0;
-        final currentPage = data['currentPage'] ?? 1;
-        final totalPages = data['totalPages'] ?? 1;
+        final responseData = response.data;
         
-        final newRides = ridesJson.map((json) => Ride.fromJson(json)).toList();
-        final hasMore = currentPage < totalPages;
+        // Handle different response structures
+        final data = responseData['data'] ?? responseData;
+        final List<dynamic> ridesJson = data['rides'] ?? data ?? [];
+        final total = data['total'] ?? ridesJson.length;
+        final currentPage = data['currentPage'] ?? data['page'] ?? 1;
+        final totalPages = data['totalPages'] ?? (total / 20).ceil();
+        
+        final newRides = ridesJson.map((json) {
+          try {
+            return Ride.fromJson(json);
+          } catch (e) {
+            if (kDebugMode) {
+              print('❌ Error parsing ride: $e');
+              print('📄 Problematic ride data: $json');
+            }
+            return null;
+          }
+        }).whereType<Ride>().toList();
+
+        final hasMore = currentPage < totalPages || newRides.length >= 20;
 
         final updatedRides = loadMore 
             ? [...state.rides, ...newRides]
@@ -199,17 +149,36 @@ class RideSearch extends _$RideSearch {
         if (kDebugMode) {
           print('✅ Search completed: ${newRides.length} rides loaded, total: $total');
         }
+      } else {
+        throw Exception('HTTP ${response.statusCode}: ${response.data}');
       }
     } on DioException catch (e) {
       if (kDebugMode) {
-        print('❌ Search error: ${e.response?.statusCode}');
-        print('❌ Error data: ${e.response?.data}');
+        print('❌ Search DioException: ${e.type}');
+        print('❌ Error message: ${e.message}');
+        print('❌ Response status: ${e.response?.statusCode}');
+        print('❌ Response data: ${e.response?.data}');
+      }
+
+      String errorMessage = 'حدث خطأ في البحث عن الرحلات';
+      
+      if (e.response?.data != null) {
+        try {
+          final errorData = e.response!.data;
+          if (errorData is Map<String, dynamic>) {
+            errorMessage = errorData['message'] as String? ?? errorMessage;
+          } else if (errorData is String) {
+            errorMessage = errorData;
+          }
+        } catch (parseError) {
+          // Use default error message
+        }
       }
 
       state = state.copyWith(
         isLoading: false,
         isLoadingMore: false,
-        error: e.response?.data?['message'] ?? 'حدث خطأ في البحث عن الرحلات',
+        error: errorMessage,
       );
     } catch (e) {
       if (kDebugMode) {
@@ -224,7 +193,7 @@ class RideSearch extends _$RideSearch {
     }
   }
 
-  // ✅ FIXED: Load more rides
+  // Load more rides
   Future<void> loadMoreRides() async {
     if (!state.hasMore || state.isLoading || state.isLoadingMore) return;
     
@@ -236,7 +205,7 @@ class RideSearch extends _$RideSearch {
     }
   }
 
-  // ✅ FIXED: Search by stop points according to your API
+  // Search by stop points
   Future<void> searchRidesByStops({
     required String fromCity,
     required String toCity,
@@ -249,20 +218,20 @@ class RideSearch extends _$RideSearch {
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final queryParams = {
+      final requestData = {
         'fromCity': fromCity,
         'toCity': toCity,
         if (intermediateCities != null && intermediateCities.isNotEmpty)
-          'intermediateCities': intermediateCities.join(','),
-        if (departureDate != null) 'departureDate': departureDate,
-        if (passengers != null) 'passengers': passengers,
+          'intermediateCities': intermediateCities,
+        if (departureDate != null) 'date': departureDate,
+        if (passengers != null) 'seats': passengers,
         if (isFemaleOnly != null) 'isFemaleOnly': isFemaleOnly,
         if (maxPrice != null) 'maxPrice': maxPrice,
       };
 
-      final response = await _dioClient.dio.get(
+      final response = await _dioClient.dio.post(
         ApiConstants.searchRidesByStops,
-        queryParameters: queryParams,
+        data: requestData,
       );
 
       if (response.statusCode == 200) {
@@ -292,7 +261,7 @@ class RideSearch extends _$RideSearch {
     }
   }
 
-  // ✅ NEW: Quick search method
+  // Quick search method
   Future<void> quickSearch({
     required String fromCity,
     required String toCity,
@@ -323,7 +292,7 @@ class RideSearch extends _$RideSearch {
   }
 }
 
-// ✅ ENHANCED: My Rides Provider (for drivers)
+// My Rides Provider (for drivers)
 @riverpod
 class MyRides extends _$MyRides {
   late DioClient _dioClient;
@@ -335,7 +304,7 @@ class MyRides extends _$MyRides {
     return RideState();
   }
 
-  // ✅ FIXED: Load my rides according to your API
+  // Load my rides
   Future<void> loadMyRides({
     String? status,
     int limit = 20,
@@ -348,20 +317,30 @@ class MyRides extends _$MyRides {
 
     try {
       final queryParams = {
+        'type': 'created', // Important: specify we want created rides
         if (status != null) 'status': status,
         'limit': limit,
         'offset': offset,
       };
+
+      if (kDebugMode) {
+        print('📡 Loading my rides with params: $queryParams');
+      }
 
       final response = await _dioClient.dio.get(
         ApiConstants.userRides,
         queryParameters: queryParams,
       );
 
+      if (kDebugMode) {
+        print('📡 My rides response status: ${response.statusCode}');
+        print('📄 My rides response data: ${response.data}');
+      }
+
       if (response.statusCode == 200) {
         final data = response.data['data'] ?? response.data;
         final List<dynamic> ridesJson = data['rides'] ?? data ?? [];
-        final total = data['total'] ?? 0;
+        final total = data['total'] ?? ridesJson.length;
         final rides = ridesJson.map((json) => Ride.fromJson(json)).toList();
 
         state = state.copyWith(
@@ -377,105 +356,180 @@ class MyRides extends _$MyRides {
     } on DioException catch (e) {
       if (kDebugMode) {
         print('❌ Load my rides error: ${e.response?.statusCode}');
+        print('❌ Error data: ${e.response?.data}');
+      }
+
+      String errorMessage = 'حدث خطأ في جلب رحلاتك';
+      
+      if (e.response?.statusCode == 401) {
+        errorMessage = 'يجب إعادة تسجيل الدخول';
+      } else if (e.response?.data != null) {
+        try {
+          final errorData = e.response!.data;
+          if (errorData is Map<String, dynamic>) {
+            errorMessage = errorData['message'] as String? ?? errorMessage;
+          }
+        } catch (parseError) {
+          // Use default error message
+        }
       }
 
       state = state.copyWith(
         isLoading: false,
-        error: e.response?.data?['message'] ?? 'حدث خطأ في جلب رحلاتك',
+        error: errorMessage,
       );
     }
   }
 
-  // ✅ FIXED: Create ride according to your API structure
-  Future<bool> createRide({
-    required String fromCity,
-    required String fromAddress,
-    required double fromLatitude,
-    required double fromLongitude,
-    required String toCity,
-    required String toAddress,
-    required double toLatitude,
-    required double toLongitude,
-    required DateTime departureTime,
-    required int availableSeats,
-    required double pricePerSeat,
-    required String description,
-    required bool isFemaleOnly,
-    List<Map<String, dynamic>>? stopPoints,
-    String? notes,
-  }) async {
-    if (state.isLoading) return false;
+  // Create ride matching your API exactly
+  Future<bool> createRide(CreateRideRequest request) async {
+    if (state.isCreating) {
+      if (kDebugMode) {
+        print('⚠️ Ride creation already in progress');
+      }
+      return false;
+    }
     
-    state = state.copyWith(isLoading: true, error: null);
+    state = state.copyWith(isCreating: true, error: null);
 
     try {
+      if (kDebugMode) {
+        print('🚗 Creating ride with data: ${request.toJson()}');
+      }
+
       final response = await _dioClient.dio.post(
         ApiConstants.rides,
-        data: {
-          'fromCity': fromCity,
-          'fromAddress': fromAddress,
-          'fromLatitude': fromLatitude,
-          'fromLongitude': fromLongitude,
-          'toCity': toCity,
-          'toAddress': toAddress,
-          'toLatitude': toLatitude,
-          'toLongitude': toLongitude,
-          'departureTime': departureTime.toIso8601String(),
-          'availableSeats': availableSeats,
-          'pricePerSeat': pricePerSeat,
-          'description': description,
-          'isFemaleOnly': isFemaleOnly,
-          if (notes != null) 'notes': notes,
-          if (stopPoints != null && stopPoints.isNotEmpty)
-            'stopPoints': stopPoints,
-        },
+        data: request.toJson(),
       );
 
-      if (response.statusCode == 200) {
-        await loadMyRides(refresh: true);
-        state = state.copyWith(isLoading: false);
+      if (kDebugMode) {
+        print('📡 Create ride response status: ${response.statusCode}');
+        print('📄 Create ride response data: ${response.data}');
+      }
 
-        if (kDebugMode) {
-          print('✅ Ride created successfully');
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        // Parse the created ride from response
+        final responseData = response.data;
+        
+        // Check if response indicates success
+        if (responseData['status'] == 'success' || responseData.containsKey('data')) {
+          if (kDebugMode) {
+            print('✅ Ride created successfully');
+          }
+
+          // Try to extract the created ride data
+          try {
+            final rideData = responseData['data']?['ride'] ?? 
+                             responseData['data'] ?? 
+                             responseData['ride'];
+            
+            if (rideData != null) {
+              final createdRide = Ride.fromJson(rideData);
+              
+              // Add to my rides list at the beginning
+              final updatedRides = [createdRide, ...state.rides];
+              state = state.copyWith(
+                rides: updatedRides,
+                isCreating: false,
+                totalRides: state.totalRides + 1,
+              );
+            } else {
+              // Successful creation but no ride data returned
+              state = state.copyWith(isCreating: false);
+              // Refresh the rides list
+              await loadMyRides(refresh: true);
+            }
+          } catch (parseError) {
+            if (kDebugMode) {
+              print('❌ Error parsing created ride: $parseError');
+            }
+            // Still successful, just refresh the list
+            state = state.copyWith(isCreating: false);
+            await loadMyRides(refresh: true);
+          }
+          
+          return true;
         }
-        return true;
+      }
+      
+      // Handle error response
+      String errorMessage = 'فشل في إنشاء الرحلة';
+      try {
+        if (response.data is Map<String, dynamic>) {
+          errorMessage = response.data['message'] as String? ?? errorMessage;
+        }
+      } catch (e) {
+        // Use default error message
+      }
+
+      if (kDebugMode) {
+        print('❌ Create ride failed: $errorMessage');
+      }
+
+      state = state.copyWith(
+        isCreating: false,
+        error: errorMessage,
+      );
+      return false;
+
+    } on DioException catch (e) {
+      if (kDebugMode) {
+        print('❌ Create ride DioException: ${e.type}');
+        print('❌ Error message: ${e.message}');
+        print('❌ Response status: ${e.response?.statusCode}');
+        print('❌ Response data: ${e.response?.data}');
+      }
+
+      String errorMessage = 'حدث خطأ في إنشاء الرحلة';
+      
+      if (e.response?.statusCode == 400) {
+        errorMessage = 'بيانات الرحلة غير صحيحة';
+      } else if (e.response?.statusCode == 401) {
+        errorMessage = 'يجب تسجيل الدخول أولاً';
+      } else if (e.response?.statusCode == 403) {
+        errorMessage = 'غير مسموح لك بإنشاء رحلات';
+      } else if (e.response?.data != null) {
+        try {
+          final errorData = e.response!.data;
+          if (errorData is Map<String, dynamic>) {
+            errorMessage = errorData['message'] as String? ?? errorMessage;
+          } else if (errorData is String) {
+            errorMessage = errorData;
+          }
+        } catch (parseError) {
+          // Use default error message
+        }
+      }
+
+      state = state.copyWith(
+        isCreating: false,
+        error: errorMessage,
+      );
+      return false;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Unexpected create ride error: $e');
       }
       
       state = state.copyWith(
-        isLoading: false,
-        error: response.data?['message'] ?? 'فشل في إنشاء الرحلة',
-      );
-      return false;
-    } on DioException catch (e) {
-      if (kDebugMode) {
-        print('❌ Create ride error: ${e.response?.statusCode}');
-      }
-
-      state = state.copyWith(
-        isLoading: false,
-        error: e.response?.data?['message'] ?? 'حدث خطأ في إنشاء الرحلة',
+        isCreating: false,
+        error: 'حدث خطأ غير متوقع',
       );
       return false;
     }
   }
 
-  // ✅ FIXED: Update ride according to your API
+  // Update ride
   Future<bool> updateRide({
     required int rideId,
-    String? fromCity,
-    String? fromAddress,
-    double? fromLatitude,
-    double? fromLongitude,
-    String? toCity,
-    String? toAddress,
-    double? toLatitude,
-    double? toLongitude,
+    Map<String, dynamic>? from,
+    Map<String, dynamic>? to,
     DateTime? departureTime,
     int? availableSeats,
-    double? pricePerSeat,
+    double? price,
     String? description,
     bool? isFemaleOnly,
-    String? notes,
+    List<Map<String, dynamic>>? stopPoints,
   }) async {
     if (state.isLoading) return false;
     
@@ -484,23 +538,17 @@ class MyRides extends _$MyRides {
     try {
       final data = <String, dynamic>{};
       
-      if (fromCity != null) data['fromCity'] = fromCity;
-      if (fromAddress != null) data['fromAddress'] = fromAddress;
-      if (fromLatitude != null) data['fromLatitude'] = fromLatitude;
-      if (fromLongitude != null) data['fromLongitude'] = fromLongitude;
-      if (toCity != null) data['toCity'] = toCity;
-      if (toAddress != null) data['toAddress'] = toAddress;
-      if (toLatitude != null) data['toLatitude'] = toLatitude;
-      if (toLongitude != null) data['toLongitude'] = toLongitude;
+      if (from != null) data['from'] = from;
+      if (to != null) data['to'] = to;
       if (departureTime != null) data['departureTime'] = departureTime.toIso8601String();
       if (availableSeats != null) data['availableSeats'] = availableSeats;
-      if (pricePerSeat != null) data['pricePerSeat'] = pricePerSeat;
+      if (price != null) data['price'] = price;
       if (description != null) data['description'] = description;
       if (isFemaleOnly != null) data['isFemaleOnly'] = isFemaleOnly;
-      if (notes != null) data['notes'] = notes;
+      if (stopPoints != null) data['stopPoints'] = stopPoints;
 
       final response = await _dioClient.dio.put(
-        ApiConstants.rideById(rideId),
+        '${ApiConstants.rides}/$rideId',
         data: data,
       );
 
@@ -532,14 +580,14 @@ class MyRides extends _$MyRides {
     }
   }
 
-  // ✅ FIXED: Cancel ride
+  // Cancel ride
   Future<bool> cancelRide(int rideId) async {
     if (state.isLoading) return false;
     
     state = state.copyWith(isLoading: true, error: null);
 
     try {
-      final response = await _dioClient.dio.delete(ApiConstants.rideById(rideId));
+      final response = await _dioClient.dio.delete('${ApiConstants.rides}/$rideId');
 
       if (response.statusCode == 200) {
         final updatedRides = state.rides
@@ -576,37 +624,7 @@ class MyRides extends _$MyRides {
     }
   }
 
-  // ✅ NEW: Start ride
-  Future<bool> startRide(int rideId) async {
-    if (state.isLoading) return false;
-    
-    state = state.copyWith(isLoading: true, error: null);
-
-    try {
-      final response = await _dioClient.dio.put(
-        '${ApiConstants.rideById(rideId)}/start',
-      );
-
-      if (response.statusCode == 200) {
-        await loadMyRides(refresh: true);
-        return true;
-      }
-      
-      state = state.copyWith(
-        isLoading: false,
-        error: response.data?['message'] ?? 'فشل في بدء الرحلة',
-      );
-      return false;
-    } on DioException catch (e) {
-      state = state.copyWith(
-        isLoading: false,
-        error: e.response?.data?['message'] ?? 'حدث خطأ في بدء الرحلة',
-      );
-      return false;
-    }
-  }
-
-  // ✅ FIXED: Complete ride
+  // Complete ride
   Future<bool> completeRide(int rideId) async {
     if (state.isLoading) return false;
     
@@ -614,11 +632,12 @@ class MyRides extends _$MyRides {
 
     try {
       final response = await _dioClient.dio.put(
-        '${ApiConstants.rideById(rideId)}/complete',
+        '${ApiConstants.rides}/$rideId/complete',
       );
 
       if (response.statusCode == 200) {
         await loadMyRides(refresh: true);
+        state = state.copyWith(isLoading: false);
         return true;
       }
       
@@ -636,66 +655,31 @@ class MyRides extends _$MyRides {
     }
   }
 
-  // ✅ FIXED: Add stop points
-  Future<bool> addStopPoint({
-    required int rideId,
-    required String cityName,
-    required String address,
-    required double latitude,
-    required double longitude,
-    required DateTime estimatedArrivalTime,
-    String? notes,
-  }) async {
-    try {
-      final response = await _dioClient.dio.post(
-        ApiConstants.rideStopsById(rideId),
-        data: {
-          'cityName': cityName,
-          'address': address,
-          'latitude': latitude,
-          'longitude': longitude,
-          'estimatedArrivalTime': estimatedArrivalTime.toIso8601String(),
-          if (notes != null) 'notes': notes,
-        },
-      );
-
-      if (response.statusCode == 200) {
-        await loadMyRides(refresh: true);
-        return true;
-      }
-      return false;
-    } on DioException catch (e) {
-      state = state.copyWith(
-        error: e.response?.data?['message'] ?? 'حدث خطأ في إضافة نقطة التوقف',
-      );
-      return false;
-    }
-  }
-
   void clearError() {
     if (state.error != null) {
       state = state.copyWith(error: null);
     }
   }
 
-  // ✅ NEW: Refresh all data
+  // Refresh all data
   Future<void> refreshAll() async {
     await loadMyRides(refresh: true);
   }
 }
 
-// ✅ FIXED: Single Ride Provider
+// Single Ride Provider
 @riverpod
 Future<Ride?> getRide(GetRideRef ref, int rideId) async {
   final prefs = ref.read(sharedPreferencesProvider);
   final dioClient = DioClient(prefs);
 
   try {
-    final response = await dioClient.dio.get(ApiConstants.rideById(rideId));
+    final response = await dioClient.dio.get('${ApiConstants.rides}/$rideId');
     
     if (response.statusCode == 200) {
-      final data = response.data['data'];
-      return Ride.fromJson(data['ride'] ?? data);
+      final data = response.data['data'] ?? response.data;
+      final rideData = data['ride'] ?? data;
+      return Ride.fromJson(rideData);
     }
     return null;
   } on DioException catch (e) {
@@ -703,27 +687,7 @@ Future<Ride?> getRide(GetRideRef ref, int rideId) async {
   }
 }
 
-// ✅ FIXED: Get Ride Stop Points
-@riverpod
-Future<List<StopPoint>> getRideStops(GetRideStopsRef ref, int rideId) async {
-  final prefs = ref.read(sharedPreferencesProvider);
-  final dioClient = DioClient(prefs);
-
-  try {
-    final response = await dioClient.dio.get(ApiConstants.rideStopsById(rideId));
-    
-    if (response.statusCode == 200) {
-      final data = response.data['data'];
-      final List<dynamic> stopsJson = data['stops'] ?? data ?? [];
-      return stopsJson.map((json) => StopPoint.fromJson(json)).toList();
-    }
-    return [];
-  } on DioException catch (e) {
-    throw e.response?.data?['message'] ?? 'حدث خطأ في جلب نقاط التوقف';
-  }
-}
-
-// ✅ NEW: Convenience Providers
+// Convenience Providers
 final ridesListProvider = Provider<List<Ride>>((ref) {
   return ref.watch(rideSearchProvider).rides;
 });
@@ -736,8 +700,20 @@ final isRideSearchLoadingProvider = Provider<bool>((ref) {
   return ref.watch(rideSearchProvider).isLoading;
 });
 
+final isMyRidesLoadingProvider = Provider<bool>((ref) {
+  return ref.watch(myRidesProvider).isLoading;
+});
+
+final isRideCreatingProvider = Provider<bool>((ref) {
+  return ref.watch(myRidesProvider).isCreating;
+});
+
 final rideSearchErrorProvider = Provider<String?>((ref) {
   return ref.watch(rideSearchProvider).error;
+});
+
+final myRidesErrorProvider = Provider<String?>((ref) {
+  return ref.watch(myRidesProvider).error;
 });
 
 final totalRidesCountProvider = Provider<int>((ref) {

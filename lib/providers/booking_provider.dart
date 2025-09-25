@@ -19,9 +19,12 @@ class BookingState {
   final List<Booking> completedBookings;
   final bool isLoading;
   final bool isLoadingMore;
+  final bool isCreating;
+  final bool isUpdating;
   final String? error;
   final int currentPage;
   final bool hasMore;
+  final int totalBookings;
   final Map<String, dynamic>? stats;
 
   BookingState({
@@ -32,9 +35,12 @@ class BookingState {
     this.completedBookings = const [],
     this.isLoading = false,
     this.isLoadingMore = false,
+    this.isCreating = false,
+    this.isUpdating = false,
     this.error,
     this.currentPage = 1,
     this.hasMore = true,
+    this.totalBookings = 0,
     this.stats,
   });
 
@@ -46,9 +52,12 @@ class BookingState {
     List<Booking>? completedBookings,
     bool? isLoading,
     bool? isLoadingMore,
+    bool? isCreating,
+    bool? isUpdating,
     String? error,
     int? currentPage,
     bool? hasMore,
+    int? totalBookings,
     Map<String, dynamic>? stats,
   }) {
     return BookingState(
@@ -59,9 +68,12 @@ class BookingState {
       completedBookings: completedBookings ?? this.completedBookings,
       isLoading: isLoading ?? this.isLoading,
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      isCreating: isCreating ?? this.isCreating,
+      isUpdating: isUpdating ?? this.isUpdating,
       error: error,
       currentPage: currentPage ?? this.currentPage,
       hasMore: hasMore ?? this.hasMore,
+      totalBookings: totalBookings ?? this.totalBookings,
       stats: stats ?? this.stats,
     );
   }
@@ -70,7 +82,6 @@ class BookingState {
   List<Booking> get pendingBookings => bookings.where((b) => b.isPending).toList();
   List<Booking> get confirmedBookings => bookings.where((b) => b.isConfirmed).toList();
   List<Booking> get cancelledBookings => bookings.where((b) => b.isCancelled).toList();
-  int get totalBookings => bookings.length;
   bool get hasError => error != null;
   bool get isEmpty => bookings.isEmpty && !isLoading;
 }
@@ -87,7 +98,7 @@ class MyBookings extends _$MyBookings {
     return BookingState();
   }
 
-  // ✅ ENHANCED: Load my bookings with comprehensive error handling
+  // ✅ FIXED: Load my bookings with proper endpoint usage
   Future<void> loadMyBookings({
     bool refresh = false,
     String? status,
@@ -113,24 +124,43 @@ class MyBookings extends _$MyBookings {
         'page': newPage,
         'limit': limit,
         if (status != null) 'status': status,
+        'type': 'passenger', // Specify we want passenger bookings
       };
 
+      if (kDebugMode) {
+        print('📡 Request params: $queryParams');
+      }
+
       final response = await _dioClient.dio.get(
-        ApiConstants.myBookings,
+        ApiConstants.bookings, // ✅ Fixed: Use correct endpoint
         queryParameters: queryParams,
       );
 
       if (kDebugMode) {
         print('📡 My bookings response: ${response.statusCode}');
+        print('📄 Response data: ${response.data}');
       }
 
       if (response.statusCode == 200) {
-        final data = response.data['data'] ?? response.data;
+        final responseData = response.data;
+        final data = responseData['data'] ?? responseData;
         final List<dynamic> bookingsJson = data['bookings'] ?? data ?? [];
         final pagination = data['pagination'] ?? {};
+        final total = data['total'] ?? bookingsJson.length;
 
         final newBookings = bookingsJson
-            .map((json) => Booking.fromJson(json))
+            .map((json) {
+              try {
+                return Booking.fromJson(json);
+              } catch (e) {
+                if (kDebugMode) {
+                  print('❌ Error parsing booking: $e');
+                  print('📄 Problematic booking data: $json');
+                }
+                return null;
+              }
+            })
+            .whereType<Booking>()
             .toList();
 
         final updatedBookings = refresh || isInitialLoad
@@ -142,6 +172,7 @@ class MyBookings extends _$MyBookings {
           bookings: updatedBookings, // Update main bookings list too
           currentPage: newPage,
           hasMore: pagination['hasNext'] ?? newBookings.length >= limit,
+          totalBookings: total,
           isLoading: false,
           isLoadingMore: false,
         );
@@ -149,17 +180,38 @@ class MyBookings extends _$MyBookings {
         if (kDebugMode) {
           print('✅ Loaded ${newBookings.length} bookings, Total: ${updatedBookings.length}');
         }
+      } else {
+        throw Exception('HTTP ${response.statusCode}: ${response.data}');
       }
     } on DioException catch (e) {
       if (kDebugMode) {
-        print('❌ Load my bookings error: ${e.response?.statusCode}');
-        print('❌ Error data: ${e.response?.data}');
+        print('❌ Load my bookings DioException: ${e.type}');
+        print('❌ Error message: ${e.message}');
+        print('❌ Response status: ${e.response?.statusCode}');
+        print('❌ Response data: ${e.response?.data}');
+      }
+
+      String errorMessage = 'حدث خطأ في جلب الحجوزات';
+      
+      if (e.response?.statusCode == 401) {
+        errorMessage = 'يجب إعادة تسجيل الدخول';
+      } else if (e.response?.data != null) {
+        try {
+          final errorData = e.response!.data;
+          if (errorData is Map<String, dynamic>) {
+            errorMessage = errorData['message'] as String? ?? errorMessage;
+          } else if (errorData is String) {
+            errorMessage = errorData;
+          }
+        } catch (parseError) {
+          // Use default error message
+        }
       }
 
       state = state.copyWith(
         isLoading: false,
         isLoadingMore: false,
-        error: e.response?.data['message'] ?? 'حدث خطأ في جلب الحجوزات',
+        error: errorMessage,
       );
     } catch (e) {
       if (kDebugMode) {
@@ -174,7 +226,7 @@ class MyBookings extends _$MyBookings {
     }
   }
 
-  // ✅ ENHANCED: Load driver bookings (bookings for my rides)
+  // ✅ FIXED: Load driver bookings with proper endpoint
   Future<void> loadDriverBookings({
     bool refresh = false,
     String? status,
@@ -203,14 +255,21 @@ class MyBookings extends _$MyBookings {
       };
 
       final response = await _dioClient.dio.get(
-        ApiConstants.driverBookings,
+        ApiConstants.driverBookings, // ✅ Fixed: Use correct endpoint
         queryParameters: queryParams,
       );
 
+      if (kDebugMode) {
+        print('📡 Driver bookings response: ${response.statusCode}');
+        print('📄 Response data: ${response.data}');
+      }
+
       if (response.statusCode == 200) {
-        final data = response.data['data'] ?? response.data;
+        final responseData = response.data;
+        final data = responseData['data'] ?? responseData;
         final List<dynamic> bookingsJson = data['bookings'] ?? data ?? [];
         final pagination = data['pagination'] ?? {};
+        final total = data['total'] ?? bookingsJson.length;
 
         final newBookings = bookingsJson
             .map((json) => Booking.fromJson(json))
@@ -224,6 +283,7 @@ class MyBookings extends _$MyBookings {
           driverBookings: updatedBookings,
           currentPage: newPage,
           hasMore: pagination['hasNext'] ?? newBookings.length >= limit,
+          totalBookings: total,
           isLoading: false,
           isLoadingMore: false,
         );
@@ -235,12 +295,26 @@ class MyBookings extends _$MyBookings {
     } on DioException catch (e) {
       if (kDebugMode) {
         print('❌ Load driver bookings error: ${e.response?.statusCode}');
+        print('❌ Error data: ${e.response?.data}');
+      }
+
+      String errorMessage = 'حدث خطأ في جلب حجوزات الرحلات';
+      
+      if (e.response?.data != null) {
+        try {
+          final errorData = e.response!.data;
+          if (errorData is Map<String, dynamic>) {
+            errorMessage = errorData['message'] as String? ?? errorMessage;
+          }
+        } catch (parseError) {
+          // Use default error message
+        }
       }
 
       state = state.copyWith(
         isLoading: false,
         isLoadingMore: false,
-        error: e.response?.data['message'] ?? 'حدث خطأ في جلب حجوزات الرحلات',
+        error: errorMessage,
       );
     } catch (e) {
       state = state.copyWith(
@@ -251,7 +325,7 @@ class MyBookings extends _$MyBookings {
     }
   }
 
-  // ✅ ENHANCED: Create booking with comprehensive validation
+  // ✅ FIXED: Create booking with proper validation and endpoint
   Future<bool> createBooking({
     required int rideId,
     required int seatsBooked,
@@ -259,8 +333,20 @@ class MyBookings extends _$MyBookings {
     String? pickupLocation,
     double? pickupLatitude,
     double? pickupLongitude,
+    String? dropoffLocation,
+    double? dropoffLatitude,
+    double? dropoffLongitude,
     String? notes,
   }) async {
+    if (state.isCreating) {
+      if (kDebugMode) {
+        print('⚠️ Booking creation already in progress');
+      }
+      return false;
+    }
+
+    state = state.copyWith(isCreating: true, error: null);
+
     if (kDebugMode) {
       print('🎫 Creating booking for ride $rideId, Seats: $seatsBooked');
     }
@@ -273,6 +359,9 @@ class MyBookings extends _$MyBookings {
         if (pickupLocation?.isNotEmpty == true) 'pickupLocation': pickupLocation,
         if (pickupLatitude != null) 'pickupLatitude': pickupLatitude,
         if (pickupLongitude != null) 'pickupLongitude': pickupLongitude,
+        if (dropoffLocation?.isNotEmpty == true) 'dropoffLocation': dropoffLocation,
+        if (dropoffLatitude != null) 'dropoffLatitude': dropoffLatitude,
+        if (dropoffLongitude != null) 'dropoffLongitude': dropoffLongitude,
         if (notes?.isNotEmpty == true) 'notes': notes,
       };
 
@@ -285,48 +374,144 @@ class MyBookings extends _$MyBookings {
         data: requestData,
       );
 
-      if (response.statusCode == 200 || response.statusCode == 201) {
-        if (kDebugMode) {
-          print('✅ Booking created successfully');
-        }
+      if (kDebugMode) {
+        print('📡 Create booking response status: ${response.statusCode}');
+        print('📄 Create booking response data: ${response.data}');
+      }
 
-        // Refresh bookings to show the new one
-        await loadMyBookings(refresh: true);
-        return true;
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final responseData = response.data;
+        
+        // Check if response indicates success
+        if (responseData['status'] == 'success' || responseData.containsKey('data')) {
+          if (kDebugMode) {
+            print('✅ Booking created successfully');
+          }
+
+          // Try to extract the created booking data
+          try {
+            final bookingData = responseData['data']?['booking'] ?? 
+                               responseData['data'] ?? 
+                               responseData['booking'];
+            
+            if (bookingData != null) {
+              final createdBooking = Booking.fromJson(bookingData);
+              
+              // Add to bookings list at the beginning
+              final updatedBookings = [createdBooking, ...state.myBookings];
+              state = state.copyWith(
+                myBookings: updatedBookings,
+                bookings: updatedBookings,
+                isCreating: false,
+                totalBookings: state.totalBookings + 1,
+              );
+            } else {
+              // Successful creation but no booking data returned
+              state = state.copyWith(isCreating: false);
+              // Refresh the bookings list
+              await loadMyBookings(refresh: true);
+            }
+          } catch (parseError) {
+            if (kDebugMode) {
+              print('❌ Error parsing created booking: $parseError');
+            }
+            // Still successful, just refresh the list
+            state = state.copyWith(isCreating: false);
+            await loadMyBookings(refresh: true);
+          }
+          
+          return true;
+        }
       }
       
-      return false;
-    } on DioException catch (e) {
+      // Handle error response
+      String errorMessage = 'فشل في إنشاء الحجز';
+      try {
+        if (response.data is Map<String, dynamic>) {
+          errorMessage = response.data['message'] as String? ?? errorMessage;
+        }
+      } catch (e) {
+        // Use default error message
+      }
+
       if (kDebugMode) {
-        print('❌ Create booking error: ${e.response?.statusCode}');
-        print('❌ Error message: ${e.response?.data}');
+        print('❌ Create booking failed: $errorMessage');
       }
 
       state = state.copyWith(
-        error: e.response?.data['message'] ?? 'فشل في إنشاء الحجز',
+        isCreating: false,
+        error: errorMessage,
+      );
+      return false;
+
+    } on DioException catch (e) {
+      if (kDebugMode) {
+        print('❌ Create booking DioException: ${e.type}');
+        print('❌ Error message: ${e.message}');
+        print('❌ Response status: ${e.response?.statusCode}');
+        print('❌ Response data: ${e.response?.data}');
+      }
+
+      String errorMessage = 'حدث خطأ في إنشاء الحجز';
+      
+      if (e.response?.statusCode == 400) {
+        errorMessage = 'بيانات الحجز غير صحيحة';
+      } else if (e.response?.statusCode == 401) {
+        errorMessage = 'يجب تسجيل الدخول أولاً';
+      } else if (e.response?.statusCode == 403) {
+        errorMessage = 'غير مسموح لك بإنشاء هذا الحجز';
+      } else if (e.response?.statusCode == 409) {
+        errorMessage = 'الرحلة ممتلئة أو غير متاحة';
+      } else if (e.response?.data != null) {
+        try {
+          final errorData = e.response!.data;
+          if (errorData is Map<String, dynamic>) {
+            errorMessage = errorData['message'] as String? ?? errorMessage;
+          } else if (errorData is String) {
+            errorMessage = errorData;
+          }
+        } catch (parseError) {
+          // Use default error message
+        }
+      }
+
+      state = state.copyWith(
+        isCreating: false,
+        error: errorMessage,
       );
       return false;
     } catch (e) {
       if (kDebugMode) {
-        print('❌ Unexpected booking creation error: $e');
+        print('❌ Unexpected create booking error: $e');
       }
-
-      state = state.copyWith(error: 'حدث خطأ غير متوقع');
+      
+      state = state.copyWith(
+        isCreating: false,
+        error: 'حدث خطأ غير متوقع',
+      );
       return false;
     }
   }
 
-  // ✅ ENHANCED: Cancel booking with confirmation
+  // ✅ FIXED: Cancel booking with proper endpoint
   Future<bool> cancelBooking(int bookingId, {String? reason}) async {
+    if (state.isUpdating) return false;
+    
+    state = state.copyWith(isUpdating: true, error: null);
+
     if (kDebugMode) {
       print('❌ Cancelling booking $bookingId, Reason: ${reason ?? 'No reason provided'}');
     }
 
     try {
-      final response = await _dioClient.dio.delete(
-        '${ApiConstants.bookings}/$bookingId',
+      final response = await _dioClient.dio.post(
+        ApiConstants.cancelBookingById(bookingId), // ✅ Fixed: Use helper method
         data: reason != null ? {'cancellationReason': reason} : null,
       );
+
+      if (kDebugMode) {
+        print('📡 Cancel booking response: ${response.statusCode}');
+      }
 
       if (response.statusCode == 200) {
         if (kDebugMode) {
@@ -334,21 +519,16 @@ class MyBookings extends _$MyBookings {
         }
 
         // Update the booking status in current state
-        final updatedBookings = state.myBookings.map((booking) {
-          if (booking.id == bookingId) {
-            return booking.copyWith(status: 'cancelled');
-          }
-          return booking;
-        }).toList();
-
-        state = state.copyWith(
-          myBookings: updatedBookings,
-          bookings: updatedBookings,
-        );
-
+        _updateBookingStatus(bookingId, 'cancelled');
+        
+        state = state.copyWith(isUpdating: false);
         return true;
       }
       
+      state = state.copyWith(
+        isUpdating: false,
+        error: response.data?['message'] ?? 'فشل في إلغاء الحجز',
+      );
       return false;
     } on DioException catch (e) {
       if (kDebugMode) {
@@ -356,24 +536,33 @@ class MyBookings extends _$MyBookings {
       }
 
       state = state.copyWith(
-        error: e.response?.data['message'] ?? 'فشل في إلغاء الحجز',
+        isUpdating: false,
+        error: e.response?.data?['message'] ?? 'حدث خطأ في إلغاء الحجز',
       );
       return false;
     } catch (e) {
-      state = state.copyWith(error: 'حدث خطأ غير متوقع');
+      state = state.copyWith(
+        isUpdating: false,
+        error: 'حدث خطأ غير متوقع',
+      );
       return false;
     }
   }
 
-  // ✅ ENHANCED: Accept booking request (for drivers)
-  Future<bool> acceptBooking(int bookingId) async {
+  // ✅ FIXED: Accept booking request with proper endpoint
+  Future<bool> acceptBooking(int bookingId, {String? notes}) async {
+    if (state.isUpdating) return false;
+    
+    state = state.copyWith(isUpdating: true, error: null);
+
     if (kDebugMode) {
       print('✅ Accepting booking $bookingId');
     }
 
     try {
       final response = await _dioClient.dio.post(
-        '${ApiConstants.bookings}/$bookingId/accept',
+        ApiConstants.acceptBookingById(bookingId), // ✅ Fixed: Use helper method
+        data: notes != null ? {'notes': notes} : null,
       );
 
       if (response.statusCode == 200) {
@@ -384,11 +573,14 @@ class MyBookings extends _$MyBookings {
         // Update booking status in current state
         _updateBookingStatus(bookingId, 'confirmed');
         
-        // Refresh driver bookings
-        await loadDriverBookings(refresh: true);
+        state = state.copyWith(isUpdating: false);
         return true;
       }
       
+      state = state.copyWith(
+        isUpdating: false,
+        error: response.data?['message'] ?? 'فشل في قبول الحجز',
+      );
       return false;
     } on DioException catch (e) {
       if (kDebugMode) {
@@ -396,24 +588,32 @@ class MyBookings extends _$MyBookings {
       }
 
       state = state.copyWith(
-        error: e.response?.data['message'] ?? 'فشل في قبول الحجز',
+        isUpdating: false,
+        error: e.response?.data?['message'] ?? 'حدث خطأ في قبول الحجز',
       );
       return false;
     } catch (e) {
-      state = state.copyWith(error: 'حدث خطأ غير متوقع');
+      state = state.copyWith(
+        isUpdating: false,
+        error: 'حدث خطأ غير متوقع',
+      );
       return false;
     }
   }
 
-  // ✅ ENHANCED: Reject booking request (for drivers)
+  // ✅ FIXED: Reject booking request with proper endpoint
   Future<bool> rejectBooking(int bookingId, {String? reason}) async {
+    if (state.isUpdating) return false;
+    
+    state = state.copyWith(isUpdating: true, error: null);
+
     if (kDebugMode) {
       print('❌ Rejecting booking $bookingId, Reason: ${reason ?? 'No reason provided'}');
     }
 
     try {
       final response = await _dioClient.dio.post(
-        '${ApiConstants.bookings}/$bookingId/reject',
+        ApiConstants.rejectBookingById(bookingId), // ✅ Fixed: Use helper method
         data: reason != null ? {'rejectionReason': reason} : null,
       );
 
@@ -425,11 +625,14 @@ class MyBookings extends _$MyBookings {
         // Update booking status in current state
         _updateBookingStatus(bookingId, 'rejected');
         
-        // Refresh driver bookings
-        await loadDriverBookings(refresh: true);
+        state = state.copyWith(isUpdating: false);
         return true;
       }
       
+      state = state.copyWith(
+        isUpdating: false,
+        error: response.data?['message'] ?? 'فشل في رفض الحجز',
+      );
       return false;
     } on DioException catch (e) {
       if (kDebugMode) {
@@ -437,54 +640,164 @@ class MyBookings extends _$MyBookings {
       }
 
       state = state.copyWith(
-        error: e.response?.data['message'] ?? 'فشل في رفض الحجز',
+        isUpdating: false,
+        error: e.response?.data?['message'] ?? 'حدث خطأ في رفض الحجز',
       );
       return false;
     } catch (e) {
-      state = state.copyWith(error: 'حدث خطأ غير متوقع');
+      state = state.copyWith(
+        isUpdating: false,
+        error: 'حدث خطأ غير متوقع',
+      );
       return false;
     }
   }
 
-  // ✅ ENHANCED: Update booking status
-  Future<bool> updateBookingStatus(int bookingId, String status) async {
+  // ✅ FIXED: Confirm booking with proper endpoint
+  Future<bool> confirmBooking(int bookingId) async {
+    if (state.isUpdating) return false;
+    
+    state = state.copyWith(isUpdating: true, error: null);
+
     if (kDebugMode) {
-      print('🔄 Updating booking $bookingId status to: $status');
+      print('✅ Confirming booking $bookingId');
     }
 
     try {
-      final response = await _dioClient.dio.put(
-        '${ApiConstants.bookings}/$bookingId/status',
-        data: {'status': status},
+      final response = await _dioClient.dio.post(
+        ApiConstants.confirmBookingById(bookingId), // ✅ Fixed: Use helper method
       );
 
       if (response.statusCode == 200) {
         if (kDebugMode) {
-          print('✅ Booking status updated successfully');
+          print('✅ Booking confirmed successfully');
         }
 
-        // Update local state
-        _updateBookingStatus(bookingId, status);
+        // Update booking status in current state
+        _updateBookingStatus(bookingId, 'confirmed');
+        
+        state = state.copyWith(isUpdating: false);
         return true;
       }
       
+      state = state.copyWith(
+        isUpdating: false,
+        error: response.data?['message'] ?? 'فشل في تأكيد الحجز',
+      );
       return false;
     } on DioException catch (e) {
       if (kDebugMode) {
-        print('❌ Update booking status error: ${e.response?.statusCode}');
+        print('❌ Confirm booking error: ${e.response?.statusCode}');
       }
 
       state = state.copyWith(
-        error: e.response?.data['message'] ?? 'فشل في تحديث حالة الحجز',
+        isUpdating: false,
+        error: e.response?.data?['message'] ?? 'حدث خطأ في تأكيد الحجز',
       );
       return false;
     } catch (e) {
-      state = state.copyWith(error: 'حدث خطأ غير متوقع');
+      state = state.copyWith(
+        isUpdating: false,
+        error: 'حدث خطأ غير متوقع',
+      );
       return false;
     }
   }
 
-  // ✅ NEW: Load booking statistics
+  // ✅ FIXED: Complete booking with proper endpoint
+  Future<bool> completeBooking(int bookingId) async {
+    if (state.isUpdating) return false;
+    
+    state = state.copyWith(isUpdating: true, error: null);
+
+    if (kDebugMode) {
+      print('🏁 Completing booking $bookingId');
+    }
+
+    try {
+      final response = await _dioClient.dio.post(
+        ApiConstants.completeBookingById(bookingId), // ✅ Fixed: Use helper method
+      );
+
+      if (response.statusCode == 200) {
+        if (kDebugMode) {
+          print('✅ Booking completed successfully');
+        }
+
+        // Update booking status in current state
+        _updateBookingStatus(bookingId, 'completed');
+        
+        state = state.copyWith(isUpdating: false);
+        return true;
+      }
+      
+      state = state.copyWith(
+        isUpdating: false,
+        error: response.data?['message'] ?? 'فشل في إكمال الحجز',
+      );
+      return false;
+    } on DioException catch (e) {
+      if (kDebugMode) {
+        print('❌ Complete booking error: ${e.response?.statusCode}');
+      }
+
+      state = state.copyWith(
+        isUpdating: false,
+        error: e.response?.data?['message'] ?? 'حدث خطأ في إكمال الحجز',
+      );
+      return false;
+    } catch (e) {
+      state = state.copyWith(
+        isUpdating: false,
+        error: 'حدث خطأ غير متوقع',
+      );
+      return false;
+    }
+  }
+
+  // ✅ FIXED: Get single booking
+  Future<Booking?> getBooking(int bookingId) async {
+    try {
+      if (kDebugMode) {
+        print('🔍 Getting booking $bookingId');
+      }
+
+      final response = await _dioClient.dio.get(
+        ApiConstants.bookingById(bookingId), // ✅ Fixed: Use helper method
+      );
+
+      if (response.statusCode == 200) {
+        final data = response.data['data'] ?? response.data;
+        final bookingData = data['booking'] ?? data;
+        
+        if (kDebugMode) {
+          print('✅ Booking fetched successfully');
+        }
+        
+        return Booking.fromJson(bookingData);
+      }
+      
+      return null;
+    } on DioException catch (e) {
+      if (kDebugMode) {
+        print('❌ Get booking error: ${e.response?.statusCode}');
+      }
+      
+      state = state.copyWith(
+        error: e.response?.data?['message'] ?? 'حدث خطأ في جلب تفاصيل الحجز',
+      );
+      return null;
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Unexpected get booking error: $e');
+      }
+      
+      state = state.copyWith(error: 'حدث خطأ غير متوقع');
+      return null;
+    }
+  }
+
+  // ✅ FIXED: Load booking statistics
   Future<void> loadBookingStats() async {
     if (kDebugMode) {
       print('📊 Loading booking statistics');
@@ -494,7 +807,8 @@ class MyBookings extends _$MyBookings {
       final response = await _dioClient.dio.get(ApiConstants.bookingStats);
 
       if (response.statusCode == 200) {
-        final stats = response.data['data'] ?? response.data;
+        final responseData = response.data;
+        final stats = responseData['data'] ?? responseData;
         
         state = state.copyWith(stats: stats);
 
@@ -507,28 +821,15 @@ class MyBookings extends _$MyBookings {
         print('❌ Load booking stats error: ${e.response?.statusCode}');
       }
       // Don't set error for stats, it's not critical
+    } catch (e) {
+      if (kDebugMode) {
+        print('❌ Unexpected stats error: $e');
+      }
+      // Don't set error for stats, it's not critical
     }
   }
 
-  // ✅ NEW: Load bookings by status
-  Future<void> loadBookingsByStatus(String status, {bool refresh = false}) async {
-    if (kDebugMode) {
-      print('🔍 Loading bookings with status: $status');
-    }
-
-    switch (status.toLowerCase()) {
-      case 'pending':
-      case 'confirmed':
-      case 'completed':
-      case 'cancelled':
-        await loadMyBookings(refresh: refresh, status: status);
-        break;
-      default:
-        await loadMyBookings(refresh: refresh);
-    }
-  }
-
-  // ✅ NEW: Search bookings
+  // ✅ FIXED: Search bookings with proper endpoint
   Future<void> searchBookings({
     String? query,
     String? status,
@@ -550,12 +851,13 @@ class MyBookings extends _$MyBookings {
       };
 
       final response = await _dioClient.dio.get(
-        '${ApiConstants.bookings}/search',
+        ApiConstants.bookings,
         queryParameters: queryParams,
       );
 
       if (response.statusCode == 200) {
-        final data = response.data['data'] ?? response.data;
+        final responseData = response.data;
+        final data = responseData['data'] ?? responseData;
         final List<dynamic> bookingsJson = data['bookings'] ?? data ?? [];
 
         final searchResults = bookingsJson
@@ -566,6 +868,7 @@ class MyBookings extends _$MyBookings {
           bookings: searchResults,
           myBookings: searchResults,
           isLoading: false,
+          totalBookings: searchResults.length,
         );
 
         if (kDebugMode) {
@@ -579,7 +882,7 @@ class MyBookings extends _$MyBookings {
 
       state = state.copyWith(
         isLoading: false,
-        error: e.response?.data['message'] ?? 'حدث خطأ في البحث عن الحجوزات',
+        error: e.response?.data?['message'] ?? 'حدث خطأ في البحث عن الحجوزات',
       );
     } catch (e) {
       state = state.copyWith(
@@ -619,6 +922,25 @@ class MyBookings extends _$MyBookings {
     await loadMyBookings();
   }
 
+  // ✅ Load bookings by status
+  Future<void> loadBookingsByStatus(String status, {bool refresh = false}) async {
+    if (kDebugMode) {
+      print('🔍 Loading bookings with status: $status');
+    }
+
+    switch (status.toLowerCase()) {
+      case 'pending':
+      case 'confirmed':
+      case 'completed':
+      case 'cancelled':
+      case 'rejected':
+        await loadMyBookings(refresh: refresh, status: status);
+        break;
+      default:
+        await loadMyBookings(refresh: refresh);
+    }
+  }
+
   // ✅ Clear error
   void clearError() {
     if (state.error != null) {
@@ -635,7 +957,26 @@ class MyBookings extends _$MyBookings {
   }
 }
 
-// ✅ Convenience Providers
+// ✅ FIXED: Get single booking provider
+@riverpod
+Future<Booking?> getBooking(GetBookingRef ref, int bookingId) async {
+  final prefs = ref.read(sharedPreferencesProvider);
+  final dioClient = DioClient(prefs);
+
+  try {
+    final response = await dioClient.dio.get(ApiConstants.bookingById(bookingId));
+    
+    if (response.statusCode == 200) {
+      final data = response.data['data'] ?? response.data;
+      final bookingData = data['booking'] ?? data;
+      return Booking.fromJson(bookingData);
+    }
+    return null;
+  } on DioException catch (e) {
+    throw e.response?.data?['message'] ?? 'حدث خطأ في جلب تفاصيل الحجز';
+  }
+}
+
 // ✅ FIXED: Convenience Providers with proper naming and no circular dependencies
 final myBookingsListProvider = Provider<List<Booking>>((ref) {
   return ref.watch(myBookingsProvider).myBookings;
@@ -669,6 +1010,14 @@ final isBookingLoadingProvider = Provider<bool>((ref) {
   return ref.watch(myBookingsProvider).isLoading;
 });
 
+final isBookingCreatingProvider = Provider<bool>((ref) {
+  return ref.watch(myBookingsProvider).isCreating;
+});
+
+final isBookingUpdatingProvider = Provider<bool>((ref) {
+  return ref.watch(myBookingsProvider).isUpdating;
+});
+
 final bookingErrorProvider = Provider<String?>((ref) {
   return ref.watch(myBookingsProvider).error;
 });
@@ -679,4 +1028,8 @@ final hasBookingErrorProvider = Provider<bool>((ref) {
 
 final totalBookingsCountProvider = Provider<int>((ref) {
   return ref.watch(myBookingsProvider).totalBookings;
+});
+
+final hasMoreBookingsProvider = Provider<bool>((ref) {
+  return ref.watch(myBookingsProvider).hasMore;
 });
