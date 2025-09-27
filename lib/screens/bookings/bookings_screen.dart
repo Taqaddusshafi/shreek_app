@@ -23,6 +23,7 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
   late TabController _tabController;
   final _searchController = TextEditingController();
   bool _isSearching = false;
+  bool _isDriverMode = false; // ✅ NEW: Track current view mode
 
   @override
   void initState() {
@@ -62,14 +63,46 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
               });
             },
           ),
+          // ✅ IMPROVED: Better driver interface
           if (isDriver)
-            IconButton(
+            PopupMenuButton<String>(
               icon: const Icon(Icons.drive_eta),
-              onPressed: () {
-                _showDriverBookingsDialog();
+              tooltip: 'خيارات السائق',
+              onSelected: (value) {
+                switch (value) {
+                  case 'driver_bookings':
+                    _showDriverBookingsDialog();
+                    break;
+                  case 'switch_mode':
+                    _switchViewMode();
+                    break;
+                }
               },
+              itemBuilder: (context) => [
+                const PopupMenuItem(
+                  value: 'driver_bookings',
+                  child: Row(
+                    children: [
+                      Icon(Icons.drive_eta, color: Colors.grey),
+                      SizedBox(width: 12),
+                      Text('حجوزات رحلاتي'),
+                    ],
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'switch_mode',
+                  child: Row(
+                    children: [
+                      Icon(Icons.swap_horiz, color: Colors.grey),
+                      SizedBox(width: 12),
+                      Text('تبديل العرض'),
+                    ],
+                  ),
+                ),
+              ],
             ),
         ],
+        // ✅ IMPROVED: Better bottom section with mode indicator
         bottom: _isSearching 
             ? PreferredSize(
                 preferredSize: const Size.fromHeight(60),
@@ -98,21 +131,146 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
                   ),
                 ),
               )
-            : TabBar(
-                controller: _tabController,
-                labelColor: Colors.white,
-                unselectedLabelColor: Colors.white70,
-                indicatorColor: Colors.white,
-                indicatorWeight: 3,
-                tabs: const [
-                  Tab(text: 'الكل'),
-                  Tab(text: 'معلقة'),
-                  Tab(text: 'مؤكدة'),
-                  Tab(text: 'مكتملة'),
-                ],
-                onTap: (index) {
-                  _loadBookingsByTab(index);
-                },
+            : PreferredSize(
+                preferredSize: Size.fromHeight(isDriver ? 100 : 50),
+                child: Column(
+                  children: [
+                    // ✅ NEW: Mode indicator for drivers
+                    if (isDriver)
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        color: _isDriverMode ? Colors.blue.shade50 : Colors.green.shade50,
+                        child: Row(
+                          children: [
+                            Icon(
+                              _isDriverMode ? Icons.drive_eta : Icons.person,
+                              size: 16,
+                              color: _isDriverMode ? Colors.blue : Colors.green,
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              _isDriverMode ? 'عرض السائق' : 'عرض الراكب',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: _isDriverMode ? Colors.blue : Colors.green,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const Spacer(),
+                            TextButton.icon(
+                              onPressed: _switchViewMode,
+                              icon: const Icon(Icons.swap_horiz, size: 14),
+                              label: const Text(
+                                'تبديل',
+                                style: TextStyle(fontSize: 12),
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 12),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    // ✅ IMPROVED: Better tab labels with counts
+                    TabBar(
+                      controller: _tabController,
+                      labelColor: Colors.white,
+                      unselectedLabelColor: Colors.white70,
+                      indicatorColor: Colors.white,
+                      indicatorWeight: 3,
+                      tabs: [
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('الكل'),
+                              if (bookingState.myBookings.isNotEmpty)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.3),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${bookingState.myBookings.length}',
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('معلقة'),
+                              if (bookingState.pendingBookings.isNotEmpty)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.8),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${bookingState.pendingBookings.length}',
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('مؤكدة'),
+                              if (bookingState.confirmedBookings.isNotEmpty)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.green.withOpacity(0.8),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${bookingState.confirmedBookings.length}',
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                        Tab(
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text('مكتملة'),
+                              if (bookingState.completedBookings.isNotEmpty)
+                                Container(
+                                  margin: const EdgeInsets.only(right: 4),
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withOpacity(0.8),
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    '${bookingState.completedBookings.length}',
+                                    style: const TextStyle(fontSize: 10),
+                                  ),
+                                ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      onTap: (index) {
+                        _loadBookingsByTab(index);
+                      },
+                    ),
+                  ],
+                ),
               ),
       ),
       body: Column(
@@ -120,30 +278,117 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
           // ✅ Enhanced Stats Card
           if (!_isSearching) _buildStatsCard(bookingState),
           
-          // ✅ Enhanced Content
+          // ✅ Enhanced Content with mode switching
           Expanded(
             child: _isSearching 
                 ? _buildSearchResults(bookingState)
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildBookingsList(bookingState.myBookings, 'جميع الحجوزات'),
-                      _buildBookingsList(bookingState.pendingBookings, 'الحجوزات المعلقة'),
-                      _buildBookingsList(bookingState.confirmedBookings, 'الحجوزات المؤكدة'),
-                      _buildBookingsList(bookingState.completedBookings, 'الحجوزات المكتملة'),
-                    ],
-                  ),
+                : _isDriverMode && isDriver
+                    ? _buildDriverBookingsView(bookingState)
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildBookingsList(bookingState.myBookings, 'جميع الحجوزات'),
+                          _buildBookingsList(bookingState.pendingBookings, 'الحجوزات المعلقة'),
+                          _buildBookingsList(bookingState.confirmedBookings, 'الحجوزات المؤكدة'),
+                          _buildBookingsList(bookingState.completedBookings, 'الحجوزات المكتملة'),
+                        ],
+                      ),
           ),
         ],
       ),
+      // ✅ IMPROVED: Context-aware FAB
       floatingActionButton: FloatingActionButton.extended(
-        onPressed: _refreshData,
+        onPressed: _isDriverMode && isDriver ? _loadDriverBookings : _refreshData,
         backgroundColor: AppColors.primaryColor,
-        icon: const Icon(Icons.refresh, color: Colors.white),
-        label: const Text(
-          'تحديث',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        icon: Icon(
+          _isDriverMode ? Icons.drive_eta : Icons.refresh, 
+          color: Colors.white,
         ),
+        label: Text(
+          _isDriverMode ? 'تحديث رحلاتي' : 'تحديث',
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
+        ),
+      ),
+    );
+  }
+
+  // ✅ NEW: Switch between driver and passenger view
+  void _switchViewMode() {
+    setState(() {
+      _isDriverMode = !_isDriverMode;
+    });
+    
+    // Load appropriate data
+    if (_isDriverMode) {
+      _loadDriverBookings();
+    } else {
+      _refreshData();
+    }
+  }
+
+  // ✅ NEW: Load driver bookings method
+  Future<void> _loadDriverBookings() async {
+    await ref.read(myBookingsProvider.notifier).loadDriverBookings(refresh: true);
+  }
+
+  // ✅ NEW: Driver bookings view (replaces TabBarView in driver mode)
+  Widget _buildDriverBookingsView(BookingState bookingState) {
+    final driverBookings = bookingState.driverBookings;
+    
+    if (bookingState.isLoading && driverBookings.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('جاري تحميل حجوزات رحلاتك...'),
+          ],
+        ),
+      );
+    }
+
+    if (driverBookings.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.drive_eta_outlined,
+              size: 64,
+              color: Colors.grey.shade400,
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'لا توجد حجوزات على رحلاتك',
+              style: TextStyle(
+                color: Colors.grey.shade600,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'سيتم عرض حجوزات الركاب هنا',
+              style: TextStyle(
+                color: Colors.grey.shade500,
+                fontSize: 14,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return RefreshIndicator(
+      onRefresh: _loadDriverBookings,
+      child: ListView.builder(
+        padding: const EdgeInsets.all(16),
+        itemCount: driverBookings.length,
+        itemBuilder: (context, index) {
+          final booking = driverBookings[index];
+          return _buildDriverBookingCard(booking);
+        },
       ),
     );
   }
@@ -237,7 +482,7 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
     );
   }
 
-  // ✅ Enhanced Bookings List
+  // Enhanced Bookings List
   Widget _buildBookingsList(List<Booking> bookings, String emptyMessage) {
     final bookingState = ref.watch(myBookingsProvider);
 
@@ -342,7 +587,7 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
     );
   }
 
-  // ✅ Enhanced Booking Card
+  // Enhanced Booking Card
   Widget _buildEnhancedBookingCard(Booking booking) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -594,12 +839,12 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
     );
   }
 
-  // ✅ Search Results
+  // Search Results
   Widget _buildSearchResults(BookingState bookingState) {
     return _buildBookingsList(bookingState.bookings, 'لم يتم العثور على نتائج');
   }
 
-  // ✅ Helper Methods
+  // Helper Methods
   Color _getStatusColor(String status) {
     switch (status.toLowerCase()) {
       case 'pending':
@@ -633,12 +878,18 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
     }
   }
 
+  // Safe date formatting without Arabic locale dependency
   String _formatBookingDate(DateTime? date) {
     if (date == null) return 'غير محدد';
-    return DateFormat('dd/MM/yyyy', 'ar').format(date);
+    
+    try {
+      return DateFormat('dd/MM/yyyy').format(date);
+    } catch (e) {
+      return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+    }
   }
 
-  // ✅ Action Methods
+  // Action Methods
   Future<void> _refreshData() async {
     await ref.read(myBookingsProvider.notifier).refreshAll();
   }
@@ -706,7 +957,7 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
     );
   }
 
-  // ✅ FIXED: Updated chat opening method
+  // Chat opening method
   Future<void> _openChat(Booking booking) async {
     if (booking.ride?.driverId == null) {
       if (mounted) {
@@ -720,7 +971,6 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
       return;
     }
 
-    // Show loading indicator
     showDialog(
       context: context,
       barrierDismissible: false,
@@ -730,19 +980,15 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
     );
 
     try {
-      // ✅ Get or create chat for this booking
       final chatId = await ref.read(chatProvider.notifier)
           .getOrCreateChatForBooking(booking.id);
 
-      // Dismiss loading
       if (mounted) Navigator.of(context).pop();
 
       if (chatId != null) {
-        // Get the chat info from the provider
         final chatInfo = ref.read(chatProvider.notifier).getChatById(chatId);
         
         if (chatInfo != null) {
-          // Navigate to chat screen with ChatInfo
           Navigator.of(context).push(
             MaterialPageRoute(
               builder: (context) => ChatScreen(
@@ -751,7 +997,6 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
             ),
           );
         } else {
-          // Create a temporary ChatInfo if not found in state
           final tempChatInfo = ChatInfo(
           id: chatId,
           rideId: booking.rideId,
@@ -765,7 +1010,6 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
           rideDepartureDate: booking.ride?.departureDate,
           isActive: true,
           unreadCount: 0,
-          // ✅ ADDED: Required createdAt and updatedAt fields
           createdAt: DateTime.now(),
           updatedAt: DateTime.now(),
         );
@@ -779,7 +1023,6 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
           );
         }
       } else {
-        // Failed to create/get chat
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -790,7 +1033,6 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
         }
       }
     } catch (e) {
-      // Dismiss loading if still showing
       if (mounted) {
         Navigator.of(context).pop();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -803,7 +1045,12 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
     }
   }
 
+  // Driver Bookings Dialog (Keep original functionality)
   void _showDriverBookingsDialog() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(myBookingsProvider.notifier).loadDriverBookings(refresh: true);
+    });
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -845,6 +1092,12 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
                     ),
                     const Spacer(),
                     IconButton(
+                      onPressed: () {
+                        ref.read(myBookingsProvider.notifier).loadDriverBookings(refresh: true);
+                      },
+                      icon: const Icon(Icons.refresh, color: Colors.white),
+                    ),
+                    IconButton(
                       onPressed: () => Navigator.of(context).pop(),
                       icon: const Icon(Icons.close, color: Colors.white),
                     ),
@@ -854,17 +1107,67 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
               Expanded(
                 child: Consumer(
                   builder: (context, ref, child) {
-                    final driverBookings = ref
-                        .watch(driverBookingsListProvider);
+                    final bookingState = ref.watch(myBookingsProvider);
+                    final driverBookings = bookingState.driverBookings;
                     
-                    return ListView.builder(
-                      controller: scrollController,
-                      padding: const EdgeInsets.all(16),
-                      itemCount: driverBookings.length,
-                      itemBuilder: (context, index) {
-                        final booking = driverBookings[index];
-                        return _buildDriverBookingCard(booking);
+                    if (bookingState.isLoading && driverBookings.isEmpty) {
+                      return const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 16),
+                            Text('جاري تحميل حجوزات السائق...'),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (driverBookings.isEmpty) {
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.drive_eta_outlined,
+                              size: 64,
+                              color: Colors.grey.shade400,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'لا توجد حجوزات على رحلاتك',
+                              style: TextStyle(
+                                color: Colors.grey.shade600,
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'سيتم عرض حجوزات الركاب هنا',
+                              style: TextStyle(
+                                color: Colors.grey.shade500,
+                                fontSize: 14,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    return RefreshIndicator(
+                      onRefresh: () async {
+                        await ref.read(myBookingsProvider.notifier).loadDriverBookings(refresh: true);
                       },
+                      child: ListView.builder(
+                        controller: scrollController,
+                        padding: const EdgeInsets.all(16),
+                        itemCount: driverBookings.length,
+                        itemBuilder: (context, index) {
+                          final booking = driverBookings[index];
+                          return _buildDriverBookingCard(booking);
+                        },
+                      ),
                     );
                   },
                 ),
@@ -876,100 +1179,224 @@ class _BookingsScreenState extends ConsumerState<BookingsScreen>
     );
   }
 
+  // Enhanced Driver Booking Card
   Widget _buildDriverBookingCard(Booking booking) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: AppColors.primaryColor.withOpacity(0.1),
-                child: Text(
-                  booking.passengerName?.substring(0, 1) ?? 'ر',
-                  style: TextStyle(
-                    color: AppColors.primaryColor,
-                    fontWeight: FontWeight.bold,
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: AppColors.primaryColor.withOpacity(0.1),
+                  child: Text(
+                    booking.passengerName?.substring(0, 1).toUpperCase() ?? 'ر',
+                    style: TextStyle(
+                      color: AppColors.primaryColor,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      booking.passengerName ?? 'راكب',
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        booking.passengerName ?? 'راكب غير محدد',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
                       ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'حجز #${booking.id} • ${_formatBookingDate(booking.createdAt)}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey.shade600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _getStatusColor(booking.status).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    _getStatusText(booking.status),
+                    style: TextStyle(
+                      color: _getStatusColor(booking.status),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
                     ),
-                    Text(
-                      '${booking.seatsBooked} مقعد - ${booking.totalPrice ?? 0} ر.س',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+            
+            const SizedBox(height: 12),
+            
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildDriverBookingInfo(
+                      icon: Icons.event_seat,
+                      label: 'المقاعد',
+                      value: '${booking.seatsBooked}',
+                      color: Colors.blue,
+                    ),
+                  ),
+                  Container(
+                    height: 30,
+                    width: 1,
+                    color: Colors.grey.shade300,
+                  ),
+                  Expanded(
+                    child: _buildDriverBookingInfo(
+                      icon: Icons.attach_money,
+                      label: 'المبلغ',
+                      value: '${booking.totalPrice ?? 0} ر.س',
+                      color: Colors.green,
+                    ),
+                  ),
+                  Container(
+                    height: 30,
+                    width: 1,
+                    color: Colors.grey.shade300,
+                  ),
+                  Expanded(
+                    child: _buildDriverBookingInfo(
+                      icon: Icons.location_on,
+                      label: 'التقاء',
+                      value: booking.pickupLocation ?? 'غير محدد',
+                      color: Colors.orange,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            if (booking.specialRequests?.isNotEmpty == true) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.amber.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.amber.withOpacity(0.3)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.note_alt, color: Colors.amber.shade700, size: 14),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'طلبات خاصة: ${booking.specialRequests}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.amber.shade800,
+                        ),
                       ),
                     ),
                   ],
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: _getStatusColor(booking.status).withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  _getStatusText(booking.status),
-                  style: TextStyle(
-                    color: _getStatusColor(booking.status),
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
+            ],
+            
+            if (booking.isPending) ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => _rejectBooking(booking),
+                      icon: const Icon(Icons.close, size: 16),
+                      label: const Text('رفض', style: TextStyle(fontSize: 12)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.red,
+                        side: const BorderSide(color: Colors.red),
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => _acceptBooking(booking),
+                      icon: const Icon(Icons.check, size: 16),
+                      label: const Text('قبول', style: TextStyle(fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.green,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
-          ),
-          
-          if (booking.isPending) ...[
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _rejectBooking(booking),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.red,
-                      side: const BorderSide(color: Colors.red),
-                    ),
-                    child: const Text('رفض'),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _acceptBooking(booking),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      foregroundColor: Colors.white,
-                    ),
-                    child: const Text('قبول'),
-                  ),
-                ),
-              ],
-            ),
           ],
-        ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildDriverBookingInfo({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Column(
+      children: [
+        Icon(icon, color: color, size: 16),
+        const SizedBox(height: 4),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+          textAlign: TextAlign.center,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            color: Colors.grey.shade600,
+          ),
+          textAlign: TextAlign.center,
+        ),
+      ],
     );
   }
 

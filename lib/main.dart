@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:intl/date_symbol_data_local.dart';  // ✅ Added for date formatting
 
 import 'screens/auth/splash_screen.dart';
 import 'providers/auth_provider.dart';
@@ -8,6 +9,9 @@ import 'core/constants/app_colors.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // ✅ Initialize date formatting for all locales to prevent LocaleDataException
+  await initializeDateFormatting();
   
   final prefs = await SharedPreferences.getInstance();
   
