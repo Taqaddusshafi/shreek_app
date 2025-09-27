@@ -1,10 +1,12 @@
+import 'dart:async'; // ✅ ADD: Import for Timer
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart'; // ✅ Add for kDebugMode
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../providers/auth_provider.dart';
 import '../../providers/ride_provider.dart' as RideProvider;
 import '../../providers/booking_provider.dart';
-import '../../models/ride_model.dart'; // ✅ Fixed: Import ride_model.dart directly for SearchParameters
+import '../../models/ride_model.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/widgets/custom_button.dart';
 import '../../core/widgets/custom_text_field.dart';
@@ -23,19 +25,101 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   final _dateController = TextEditingController();
   DateTime? _selectedDate;
 
+  // ✅ ADD: Debounce timer for search
+  Timer? _debounceTimer;
+  static const Duration _debounceDuration = Duration(milliseconds: 1000); // Increased to 1 second
+
   @override
   void initState() {
     super.initState();
     _loadInitialData();
   }
 
+  // ✅ FIXED: Load initial data method
   void _loadInitialData() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final isAuthenticated = ref.read(isAuthenticatedProvider);
       if (isAuthenticated) {
         ref.read(myBookingsProvider.notifier).loadMyBookings();
+        
+        // ✅ FIXED: Load all available rides initially using searchRides
+        final allRidesParams = SearchParameters(
+          fromCity: '',
+          toCity: '',
+          departureDate: '',
+          limit: 50,
+        );
+        
+        ref.read(RideProvider.rideSearchProvider.notifier).searchRides(allRidesParams);
       }
     });
+  }
+
+  // ✅ FIXED: Refresh data method
+  Future<void> _refreshData() async {
+    final authState = ref.read(authProvider);
+    if (authState.isAuthenticated) {
+      final user = ref.read(currentUserProvider);
+      await Future.wait([
+        ref.read(myBookingsProvider.notifier).loadMyBookings(refresh: true),
+        if (_getUserIsDriver(user)) 
+          ref.read(RideProvider.myRidesProvider.notifier).loadMyRides(refresh: true),
+      ]);
+      
+      // ✅ FIXED: Refresh available rides using searchRides
+      final refreshParams = SearchParameters(
+        fromCity: '',
+        toCity: '',
+        departureDate: '',
+        limit: 50,
+      );
+      
+      ref.read(RideProvider.rideSearchProvider.notifier).searchRides(refreshParams);
+    }
+  }
+
+  // ✅ FIXED: Debounced live search method
+  void _performLiveSearch() {
+    // Cancel the previous timer if it exists
+    _debounceTimer?.cancel();
+    
+    // Create a new timer
+    _debounceTimer = Timer(_debounceDuration, () {
+      // Only search if there's meaningful content
+      if (_fromController.text.trim().isNotEmpty || _toController.text.trim().isNotEmpty) {
+        // Check minimum length to avoid too many requests
+        final fromText = _fromController.text.trim();
+        final toText = _toController.text.trim();
+        
+        // Skip search if both fields have less than 2 characters
+        if (fromText.isNotEmpty && fromText.length < 2 && toText.isNotEmpty && toText.length < 2) {
+          return;
+        }
+        
+        final searchParams = SearchParameters(
+          fromCity: fromText.isEmpty ? '' : fromText,
+          toCity: toText.isEmpty ? '' : toText,
+          departureDate: _selectedDate?.toIso8601String().split('T')[0] ?? '',
+          limit: 20,
+        );
+
+        if (kDebugMode) {
+          print('🔍 Debounced search with params: '
+              'fromCity=${searchParams.fromCity}, '
+              'toCity=${searchParams.toCity}, '
+              'departureDate=${searchParams.departureDate}, '
+              'limit=${searchParams.limit}');
+        }
+
+        ref.read(RideProvider.rideSearchProvider.notifier).searchRides(searchParams);
+      }
+    });
+  }
+
+  // ✅ ADD: Method to cancel ongoing search requests
+  void _cancelPendingSearch() {
+    _debounceTimer?.cancel();
+    _debounceTimer = null;
   }
 
   @override
@@ -46,14 +130,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.grey.shade50,
       body: RefreshIndicator(
-        onRefresh: () async {
-          if (authState.isAuthenticated) {
-            await Future.wait([
-              ref.read(myBookingsProvider.notifier).loadMyBookings(refresh: true),
-              if (_getUserIsDriver(user)) ref.read(RideProvider.myRidesProvider.notifier).loadMyRides(refresh: true),
-            ]);
-          }
-        },
+        onRefresh: _refreshData, // ✅ Use the new method
         color: AppColors.primaryColor,
         child: CustomScrollView(
           slivers: [
@@ -161,6 +238,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       const SizedBox(height: 24),
                     ],
                     
+                    // ✅ FIXED: Show search results preview
+                    _buildSearchResultsPreview(),
+                    
+                    const SizedBox(height: 24),
+                    
                     // Upcoming Bookings
                     _buildUpcomingBookings(),
                     
@@ -225,24 +307,94 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 ],
               ),
               const SizedBox(height: 16),
-              CustomTextField(
+              
+              // ✅ IMPROVED: TextField with debounced search and minimum length check
+              TextField(
                 controller: _fromController,
-                labelText: 'من',
-                hintText: 'نقطة الانطلاق',
-                prefixIcon: Icons.my_location,
-                maxLength: 100,
                 style: const TextStyle(fontSize: 16),
+                maxLength: 100,
+                onChanged: (value) {
+                  // Only trigger search if input has meaningful length (2+ characters) or is cleared
+                  if (value.trim().length >= 2 || value.trim().isEmpty) {
+                    _performLiveSearch();
+                  }
+                },
+                decoration: InputDecoration(
+                  labelText: 'من',
+                  hintText: 'نقطة الانطلاق',
+                  prefixIcon: const Icon(Icons.my_location),
+                  suffixIcon: _fromController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _fromController.clear();
+                            _cancelPendingSearch();
+                            setState(() {}); // Update UI
+                            _performLiveSearch();
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: AppColors.primaryColor),
+                  ),
+                  counterText: '', // Hide character counter
+                ),
               ),
+              
               const SizedBox(height: 12),
-              CustomTextField(
+              
+              // ✅ IMPROVED: TextField with debounced search and minimum length check
+              TextField(
                 controller: _toController,
-                labelText: 'إلى',
-                hintText: 'الوجهة',
-                prefixIcon: Icons.location_on,
-                maxLength: 100,
                 style: const TextStyle(fontSize: 16),
+                maxLength: 100,
+                onChanged: (value) {
+                  // Only trigger search if input has meaningful length (2+ characters) or is cleared
+                  if (value.trim().length >= 2 || value.trim().isEmpty) {
+                    _performLiveSearch();
+                  }
+                },
+                decoration: InputDecoration(
+                  labelText: 'إلى',
+                  hintText: 'الوجهة',
+                  prefixIcon: const Icon(Icons.location_on),
+                  suffixIcon: _toController.text.isNotEmpty
+                      ? IconButton(
+                          icon: const Icon(Icons.clear),
+                          onPressed: () {
+                            _toController.clear();
+                            _cancelPendingSearch();
+                            setState(() {}); // Update UI
+                            _performLiveSearch();
+                          },
+                        )
+                      : null,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: Colors.grey.shade300),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    borderSide: BorderSide(color: AppColors.primaryColor),
+                  ),
+                  counterText: '', // Hide character counter
+                ),
               ),
+              
               const SizedBox(height: 12),
+              
+              // ✅ Keep CustomTextField for date field (no onChanged needed)
               InkWell(
                 onTap: _selectDate,
                 child: IgnorePointer(
@@ -256,10 +408,180 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                 ),
               ),
+              
               const SizedBox(height: 20),
-              CustomButton(
-                text: 'البحث',
-                onPressed: _searchRides,
+              Row(
+                children: [
+                  Expanded(
+                    child: CustomButton(
+                      text: 'البحث',
+                      onPressed: _searchRides,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: _showAllRides,
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppColors.primaryColor,
+                        side: BorderSide(color: AppColors.primaryColor),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('عرض الكل'),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ✅ NEW: Search results preview widget
+  Widget _buildSearchResultsPreview() {
+    return Consumer(
+      builder: (context, ref, child) {
+        final searchState = ref.watch(RideProvider.rideSearchProvider);
+        
+        if (searchState.rides.isEmpty) {
+          return const SizedBox();
+        }
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.search,
+                      color: AppColors.primaryColor,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'الرحلات المتاحة (${searchState.rides.length})',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                  ],
+                ),
+                TextButton(
+                  onPressed: _viewAllSearchResults,
+                  child: const Text(
+                    'عرض الكل',
+                    style: TextStyle(color: AppColors.primaryColor),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            SizedBox(
+              height: 180,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                itemCount: searchState.rides.take(5).length,
+                itemBuilder: (context, index) {
+                  final ride = searchState.rides[index];
+                  return _buildRidePreviewCard(ride);
+                },
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  // ✅ NEW: Ride preview card
+  Widget _buildRidePreviewCard(dynamic ride) {
+    return Container(
+      width: 280,
+      margin: const EdgeInsets.only(left: 12),
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Route
+              Text(
+                '${_getRideFromCity(ride)} → ${_getRideToCity(ride)}',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              
+              // Date and time
+              Text(
+                _getRideDepartureTime(ride),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                ),
+              ),
+              const SizedBox(height: 8),
+              
+              // Price and seats
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '${_getRidePrice(ride)} ر.س',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.primaryColor,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${_getRideAvailableSeats(ride)} مقعد',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.green,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              
+              // Book button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => _bookRide(ride),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryColor,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text('احجز الآن', style: TextStyle(fontSize: 12)),
+                ),
               ),
             ],
           ),
@@ -725,7 +1047,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             onTap: () {
               _fromController.text = route['from']!;
               _toController.text = route['to']!;
-              _searchRides();
+              setState(() {}); // Update UI to show clear buttons
+              _performLiveSearch(); // Trigger search with debounce
             },
           ),
         )),
@@ -733,7 +1056,62 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  // ✅ Helper methods for safe user property access
+  // Helper methods remain the same as in your original file...
+  // [All helper methods from _getRideFromCity to _showProfileMenu remain unchanged]
+
+  String _getRideFromCity(dynamic ride) {
+    try {
+      return ride.fromCity ?? ride.from_city ?? ride.fromLocation ?? 'غير محدد';
+    } catch (e) {
+      return 'غير محدد';
+    }
+  }
+
+  String _getRideToCity(dynamic ride) {
+    try {
+      return ride.toCity ?? ride.to_city ?? ride.toLocation ?? 'غير محدد';
+    } catch (e) {
+      return 'غير محدد';
+    }
+  }
+
+  String _getRideDepartureTime(dynamic ride) {
+    try {
+      final dateTime = ride.departureTime ?? ride.departure_time;
+      if (dateTime == null) return 'غير محدد';
+      
+      DateTime parsedDate;
+      if (dateTime is String) {
+        parsedDate = DateTime.parse(dateTime);
+      } else if (dateTime is DateTime) {
+        parsedDate = dateTime;
+      } else {
+        return 'غير محدد';
+      }
+      
+      return '${parsedDate.day}/${parsedDate.month} - ${parsedDate.hour.toString().padLeft(2, '0')}:${parsedDate.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return 'غير محدد';
+    }
+  }
+
+  String _getRidePrice(dynamic ride) {
+    try {
+      final price = ride.pricePerSeat ?? ride.price_per_seat ?? ride.price ?? 0;
+      return price.toString();
+    } catch (e) {
+      return '0';
+    }
+  }
+
+  int _getRideAvailableSeats(dynamic ride) {
+    try {
+      return ride.availableSeats ?? ride.available_seats ?? ride.seats ?? 0;
+    } catch (e) {
+      return 0;
+    }
+  }
+
   ImageProvider? _getUserProfileImage(dynamic user) {
     if (user == null) return null;
     try {
@@ -823,7 +1201,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
   }
 
-  // ✅ Booking helper methods with safe property access
   bool _isUpcomingBooking(dynamic booking) {
     try {
       final status = booking.status ?? '';
@@ -944,19 +1321,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         _selectedDate = date;
         _dateController.text = '${date.day}/${date.month}/${date.year}';
       });
+      
+      _performLiveSearch();
     }
   }
 
-  // ✅ FIXED: _searchRides method with correct SearchParameters usage
   void _searchRides() {
-    if (_fromController.text.isEmpty || _toController.text.isEmpty) {
+    // Cancel any pending search first
+    _cancelPendingSearch();
+    
+    if (_fromController.text.isEmpty && _toController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Row(
             children: [
               Icon(Icons.warning, color: Colors.white),
               SizedBox(width: 8),
-              Text('يرجى تحديد نقطة الانطلاق والوجهة'),
+              Text('يرجى تحديد نقطة الانطلاق أو الوجهة على الأقل'),
             ],
           ),
           backgroundColor: Colors.orange,
@@ -969,21 +1350,25 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return;
     }
 
-    // ✅ FIXED: Use SearchParameters directly from ride_model.dart
     final searchParams = SearchParameters(
-      fromCity: _fromController.text.trim(),
-      toCity: _toController.text.trim(),
-      departureDate: _selectedDate?.toIso8601String().split('T')[0],
-      limit: 20,
+      fromCity: _fromController.text.trim().isEmpty ? '' : _fromController.text.trim(),
+      toCity: _toController.text.trim().isEmpty ? '' : _toController.text.trim(),
+      departureDate: _selectedDate?.toIso8601String().split('T')[0] ?? '',
+      limit: 50,
     );
+
+    if (kDebugMode) {
+      print('🔍 Searching with params: '
+          'fromCity=${searchParams.fromCity}, '
+          'toCity=${searchParams.toCity}, '
+          'departureDate=${searchParams.departureDate}, '
+          'limit=${searchParams.limit}');
+    }
 
     ref.read(RideProvider.rideSearchProvider.notifier).searchRides(searchParams);
     
     // Navigate to rides tab
-    final tabController = DefaultTabController.of(context);
-    if (tabController != null) {
-      tabController.animateTo(1); // Navigate to rides tab
-    }
+    _viewAllSearchResults();
 
     // Show success message
     ScaffoldMessenger.of(context).showSnackBar(
@@ -1004,6 +1389,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
+  void _showAllRides() {
+    // Cancel any pending search first
+    _cancelPendingSearch();
+    
+    if (kDebugMode) {
+      print('🔍 Loading all available rides');
+    }
+
+    final searchParams = SearchParameters(
+      fromCity: '',
+      toCity: '',
+      departureDate: '',
+      limit: 100,
+    );
+
+    ref.read(RideProvider.rideSearchProvider.notifier).searchRides(searchParams);
+    
+    _viewAllSearchResults();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Row(
+          children: [
+            Icon(Icons.refresh, color: Colors.white),
+            SizedBox(width: 8),
+            Text('جاري تحميل جميع الرحلات المتاحة...'),
+          ],
+        ),
+        backgroundColor: AppColors.primaryColor,
+        behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+      ),
+    );
+  }
+
+  void _viewAllSearchResults() {
+    try {
+      final tabController = DefaultTabController.of(context);
+      tabController?.animateTo(1);
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ DefaultTabController not found: $e');
+      }
+    }
+  }
+
+  void _bookRide(dynamic ride) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('حجز رحلة ${_getRideFromCity(ride)} → ${_getRideToCity(ride)}'),
+        backgroundColor: AppColors.primaryColor,
+      ),
+    );
+  }
+
   void _createRide() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -1012,31 +1454,44 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     ).then((result) {
       if (result == true) {
         ref.read(RideProvider.myRidesProvider.notifier).loadMyRides(refresh: true);
+        
+        final refreshParams = SearchParameters(
+          fromCity: '',
+          toCity: '',
+          departureDate: '',
+          limit: 50,
+        );
+        
+        ref.read(RideProvider.rideSearchProvider.notifier).searchRides(refreshParams);
       }
     });
   }
 
   void _viewMyRides() {
-    final tabController = DefaultTabController.of(context);
-    if (tabController != null) {
-      tabController.animateTo(1);
+    try {
+      final tabController = DefaultTabController.of(context);
+      tabController?.animateTo(1);
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ DefaultTabController not found: $e');
+      }
     }
   }
 
   void _viewAllBookings() {
-    final tabController = DefaultTabController.of(context);
-    if (tabController != null) {
-      tabController.animateTo(2);
+    try {
+      final tabController = DefaultTabController.of(context);
+      tabController?.animateTo(2);
+    } catch (e) {
+      if (kDebugMode) {
+        print('⚠️ DefaultTabController not found: $e');
+      }
     }
   }
 
   void _viewDriverBookings() {
     ref.read(myBookingsProvider.notifier).loadDriverBookings(refresh: true);
-    
-    final tabController = DefaultTabController.of(context);
-    if (tabController != null) {
-      tabController.animateTo(2);
-    }
+    _viewAllBookings();
   }
 
   void _viewStats() {
@@ -1128,7 +1583,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               title: const Text('الملف الشخصي'),
               onTap: () {
                 Navigator.pop(context);
-                // Navigate to profile
               },
             ),
             ListTile(
@@ -1136,7 +1590,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               title: const Text('الإعدادات'),
               onTap: () {
                 Navigator.pop(context);
-                // Navigate to settings
               },
             ),
             ListTile(
@@ -1155,6 +1608,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
+    // ✅ IMPORTANT: Cancel timer when disposing
+    _debounceTimer?.cancel();
     _fromController.dispose();
     _toController.dispose();
     _dateController.dispose();
